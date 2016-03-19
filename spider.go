@@ -100,9 +100,9 @@ func (d *DHT) Walk() {
 		} else {
 			for _, node := range d.Table.Nodes {
 				d.Session.SendTo(PacketFindNode(node.ID.Neighbor(), NewNodeID()), node.Addr)
+				time.Sleep(time.Millisecond)
 			}
 			d.Table.Nodes = nil
-			time.Sleep(time.Millisecond * 500)
 		}
 	}
 }
