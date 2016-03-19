@@ -21,7 +21,9 @@ type Session struct {
 }
 
 func NewSession() (*Session, error) {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: 63309})
+	// addr := &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: 63309}
+	addr := new(net.UDPAddr)
+	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		return nil, err
 	}

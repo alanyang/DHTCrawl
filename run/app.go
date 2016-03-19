@@ -13,7 +13,7 @@ func main() {
 		// log.Printf("Got a unsure hash magnet:?xt=urn:btih:%x", []byte(hash))
 	}
 	dht.EnsureHash = func(hash crawl.Hash, _ *net.UDPAddr, _ *net.TCPAddr) {
-		log.Printf("Got a ensure hash magnet:?xt=urn:btih:%x", []byte(hash))
+		log.Printf("Got a ensure hash magnet:?xt=urn:btih:%X", []byte(hash))
 	}
 	dht.Run()
 }

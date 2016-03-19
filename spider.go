@@ -65,16 +65,19 @@ func (d *DHT) Run() {
 			if d.FoundNodes != nil {
 				d.FoundNodes(r.Nodes, r.UDPAddr)
 			}
+
 		case OP_GET_PEERS:
-			ns := ConvertByteStream(d.Table.Last)
-			d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
 			if d.UnsureHash != nil {
+				ns := ConvertByteStream(d.Table.Last)
+				d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
 				d.UnsureHash(r.Hash, r.UDPAddr)
 			}
+
 		case OP_ANNOUNCE_PEER:
-			d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
-			if d.EnsureHash != nil {
+			if d.EnsureHash != nil && r.Token == d.Token.Value {
 				d.EnsureHash(r.Hash, r.UDPAddr, r.TCPAddr)
+				d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
+
 			}
 		}
 	}
@@ -99,7 +102,7 @@ func (d *DHT) Walk() {
 				d.Session.SendTo(PacketFindNode(node.ID.Neighbor(), NewNodeID()), node.Addr)
 			}
 			d.Table.Nodes = nil
-			time.Sleep(time.Second * 1)
+			time.Sleep(time.Millisecond * 500)
 		}
 	}
 }
