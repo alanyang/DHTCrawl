@@ -21,7 +21,7 @@ type Session struct {
 }
 
 func NewSession() (*Session, error) {
-	conn, err := net.ListenUDP("udp", new(net.UDPAddr))
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: 63309})
 	if err != nil {
 		return nil, err
 	}
@@ -32,13 +32,13 @@ func NewSession() (*Session, error) {
 }
 
 func (s *Session) serve() {
+	buf := make([]byte, 1024)
 	for {
-		buf := make([]byte, 1024)
 		_, addr, err := s.Conn.ReadFromUDP(buf)
 		if err != nil {
 			continue
 		}
-		r, err := s.rpc.parse(buf, addr)
+		r, err := s.rpc.parse(string(buf), addr)
 		if err != nil {
 			continue
 		}

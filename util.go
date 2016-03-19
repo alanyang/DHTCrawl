@@ -1,6 +1,7 @@
 package DHTCrawl
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -35,6 +36,24 @@ func DecodeNodes(data []byte) ([]*Node, error) {
 		}
 	}
 	return nodes, nil
+}
+
+func ConvertByteStream(nodes []*Node) []byte {
+	buf := bytes.NewBuffer(nil)
+	for _, v := range nodes {
+		convertNodeInfo(buf, v)
+	}
+	return buf.Bytes()
+}
+
+func convertNodeInfo(buf *bytes.Buffer, v *Node) {
+	buf.Write([]byte(v.ID))
+	convertIPPort(buf, []byte(v.Addr.IP), v.Addr.Port)
+}
+func convertIPPort(buf *bytes.Buffer, ip net.IP, port int) {
+	buf.Write(ip.To4())
+	buf.WriteByte(byte((port & 0xFF00) >> 8))
+	buf.WriteByte(byte(port & 0xFF))
 }
 
 func GenerateTid() string {

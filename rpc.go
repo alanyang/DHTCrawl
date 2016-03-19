@@ -1,6 +1,7 @@
 package DHTCrawl
 
 import (
+	"bytes"
 	"errors"
 	"github.com/zeebo/bencode"
 	"net"
@@ -49,13 +50,13 @@ func PacketFindNode(id, target NodeID) []byte {
 
 //response
 //id is self id
-func PacketGetPeers(hash Hash, id NodeID, token, tid string) []byte {
+func PacketGetPeers(hash Hash, id NodeID, nodes []byte, token, tid string) []byte {
 	d := map[string]interface{}{
 		"t": tid,
 		"y": TYPE_RESPONSE,
 		"r": map[string]string{
 			"id":    NodeID(hash).Neighbor().String(),
-			"nodes": "",
+			"nodes": bytes.NewBuffer(nodes).String(),
 			"token": token,
 		},
 	}
@@ -85,11 +86,11 @@ func (r *RPC) HandleGetPeers(args map[string]interface{}) Hash {
 }
 
 //info hash, tcp port, token
-func (r *RPC) HandleAnnoucePeer(args map[string]interface{}) (hash Hash, port int, token string) {
+func (r *RPC) HandleAnnoucePeer(args map[string]interface{}) (hash Hash, port int64, token string) {
 	if h, ok := args["info_hash"].(string); ok {
 		hash = Hash(h)
 	}
-	port, _ = args["port"].(int)
+	port, _ = args["port"].(int64)
 	token, _ = args["token"].(string)
 	return
 }
@@ -105,11 +106,10 @@ func (r *RPC) HandleFindNode(resp map[string]interface{}) (ns []*Node) {
 	return
 }
 
-func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
+func (r *RPC) parse(data string, addr *net.UDPAddr) (*Result, error) {
 	v := make(map[string]interface{})
-	// println(string(data))
 
-	if err := bencode.DecodeBytes(data, &v); err != nil {
+	if err := bencode.DecodeString(data, &v); err != nil {
 		return nil, err
 	}
 
@@ -135,8 +135,8 @@ func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 			}
 		case OP_ANNOUNCE_PEER:
 			hash, port, token := r.HandleAnnoucePeer(a)
-			if hash != nil && IsValidPort(port) {
-				tcpAddr := &net.TCPAddr{IP: addr.IP, Port: port}
+			if hash != nil && IsValidPort(int(port)) {
+				tcpAddr := &net.TCPAddr{IP: addr.IP, Port: int(port)}
 				return &Result{
 					Cmd:     OP_ANNOUNCE_PEER,
 					UDPAddr: addr,

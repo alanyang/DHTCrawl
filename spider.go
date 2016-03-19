@@ -56,30 +56,26 @@ func (d *DHT) Run() {
 	// }
 	go d.Walk()
 	for {
-		select {
-		case r := <-d.Session.result:
-			switch r.Cmd {
-			case OP_FIND_NODE:
-				for _, node := range r.Nodes {
-					d.Table.Add(node)
-				}
-				if d.FoundNodes != nil {
-					d.FoundNodes(r.Nodes, r.UDPAddr)
-				}
-			case OP_GET_PEERS:
-				if d.UnsureHash != nil {
-					d.UnsureHash(r.Hash, r.UDPAddr)
-					d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, d.Token.Value, r.Tid), r.UDPAddr)
-				}
-			case OP_ANNOUNCE_PEER:
-				if d.EnsureHash != nil {
-					d.EnsureHash(r.Hash, r.UDPAddr, r.TCPAddr)
-					d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
-				}
+		r := <-d.Session.result
+		switch r.Cmd {
+		case OP_FIND_NODE:
+			for _, node := range r.Nodes {
+				d.Table.Add(node)
 			}
-		case <-time.After(time.Second):
-			// d.Join()
-			// d.Walk()
+			if d.FoundNodes != nil {
+				d.FoundNodes(r.Nodes, r.UDPAddr)
+			}
+		case OP_GET_PEERS:
+			ns := ConvertByteStream(d.Table.Last)
+			d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
+			if d.UnsureHash != nil {
+				d.UnsureHash(r.Hash, r.UDPAddr)
+			}
+		case OP_ANNOUNCE_PEER:
+			d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
+			if d.EnsureHash != nil {
+				d.EnsureHash(r.Hash, r.UDPAddr, r.TCPAddr)
+			}
 		}
 	}
 }
@@ -102,7 +98,7 @@ func (d *DHT) Walk() {
 			for _, node := range d.Table.Nodes {
 				d.Session.SendTo(PacketFindNode(node.ID.Neighbor(), NewNodeID()), node.Addr)
 			}
-			d.Table.Nodes = []*Node{}
+			d.Table.Nodes = nil
 			time.Sleep(time.Second * 1)
 		}
 	}

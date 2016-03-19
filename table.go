@@ -27,6 +27,7 @@ type (
 
 	Table struct {
 		Nodes []*Node
+		Last  []*Node
 		Self  NodeID
 	}
 )
@@ -76,5 +77,9 @@ func NewTable() *Table {
 }
 
 func (t *Table) Add(node *Node) {
-	t.Nodes = append(t.Nodes)
+	t.Nodes = append(t.Nodes, node)
+	t.Last = append(t.Last, node)
+	if len(t.Last) > 8 {
+		t.Last = t.Last[1:]
+	}
 }
