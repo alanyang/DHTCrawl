@@ -10,18 +10,14 @@ import (
 )
 
 type (
-	HandlerUnsureHash func(Hash, *net.UDPAddr)
-	HandlerEnsureHash func(Hash, *net.UDPAddr, *net.TCPAddr)
-	HandlerFoundNodes func([]*Node, *net.UDPAddr)
+	HandlerEnsureHash func(Hash) bool
 
 	DHT struct {
 		Session    *Session
 		Table      *Table
 		Bootstraps []string
 		Token      *Token
-		UnsureHash HandlerUnsureHash
-		EnsureHash HandlerEnsureHash
-		FoundNodes HandlerFoundNodes
+		Handler    HandlerEnsureHash
 	}
 )
 
@@ -62,22 +58,20 @@ func (d *DHT) Run() {
 			for _, node := range r.Nodes {
 				d.Table.Add(node)
 			}
-			if d.FoundNodes != nil {
-				d.FoundNodes(r.Nodes, r.UDPAddr)
-			}
 
 		case OP_GET_PEERS:
-			if d.UnsureHash != nil {
-				ns := ConvertByteStream(d.Table.Last)
-				d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
-				d.UnsureHash(r.Hash, r.UDPAddr)
-			}
+			ns := ConvertByteStream(d.Table.Last)
+			d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
 
 		case OP_ANNOUNCE_PEER:
-			if d.EnsureHash != nil && r.Token == d.Token.Value {
-				d.EnsureHash(r.Hash, r.UDPAddr, r.TCPAddr)
+			if d.Token.Value == r.Token {
 				d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
-
+			}
+			if d.Handler != nil {
+				need := d.Handler(r.Hash)
+				if need {
+					//fetch metadata info from tcp port (bep_09, bep_10)
+				}
 			}
 		}
 	}
@@ -105,4 +99,8 @@ func (d *DHT) Walk() {
 			d.Table.Nodes = nil
 		}
 	}
+}
+
+func (d *DHT) Handle(h HandlerEnsureHash) {
+	d.Handler = h
 }
