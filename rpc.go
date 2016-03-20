@@ -125,8 +125,14 @@ func (r *RPC) parse(data string, addr *net.UDPAddr) (*Result, error) {
 
 	switch y {
 	case TYPE_QUERY:
-		q := v["q"].(string)
-		a := v["a"].(map[string]interface{})
+		q, ok := v["q"].(string)
+		if !ok {
+			return nil, errors.New("Invalid protocol field 'q'")
+		}
+		a, ok := v["a"].(map[string]interface{})
+		if !ok {
+			return nil, errors.New("Invalid protocol field 'a'")
+		}
 		switch q {
 		case OP_GET_PEERS:
 			hash := r.HandleGetPeers(a)
