@@ -69,6 +69,7 @@ func (d *DHT) Run() {
 			}
 			if d.Handler != nil {
 				need := d.Handler(r.Hash)
+				log.Fatal(r.TCPAddr.String())
 				if need {
 					//fetch metadata info from tcp port (bep_09, bep_10)
 				}
