@@ -17,6 +17,7 @@ type (
 		Table      *Table
 		Bootstraps []string
 		Token      *Token
+		Wire       *Wire
 		Handler    HandlerEnsureHash
 	}
 )
@@ -30,6 +31,7 @@ func NewDHT() *DHT {
 		Session: session,
 		Table:   NewTable(),
 		Token:   NewToken(20),
+		Wire:    NewWire(),
 		Bootstraps: []string{
 			"67.215.246.10:6881",
 			"212.129.33.50:6881",
@@ -71,13 +73,7 @@ func (d *DHT) Run() {
 				need := d.Handler(r.Hash)
 				if need {
 					//fetch metadata info from tcp port (bep_09, bep_10)
-					t, err := NewTransport(r.TCPAddr, r.Hash)
-					if err != nil {
-						log.Println(err)
-						break
-					}
-					t.Conn.Write(PacketHandshake(r.Hash))
-					time.Sleep(time.Second * 3)
+					d.Wire.AddJob(r.Hash, r.TCPAddr)
 				}
 			}
 		}

@@ -2,10 +2,16 @@ package DHTCrawl
 
 import (
 	"bytes"
+	"encoding/binary"
+	"github.com/zeebo/bencode"
 )
 
 const (
-	MESSAGE_PROTOCOL = "BitTorrent protocol"
+	MAX_METADATA_SIZE = 3145728
+	MESSAGE_PROTOCOL  = "BitTorrent protocol"
+
+	MESSAGE_ID   byte = 20
+	EXTENSION_ID byte = 0
 )
 
 var (
@@ -23,4 +29,40 @@ func PacketHandshake(hash Hash) []byte {
 	//peerid
 	body.Write([]byte(NewNodeID()))
 	return body.Bytes()
+}
+
+func PacketExtension() []byte {
+	body := bytes.NewBuffer([]byte{})
+	body.WriteByte(MESSAGE_ID)
+	body.WriteByte(EXTENSION_ID)
+
+	m := map[string]interface{}{"m": map[string]interface{}{"ut_bmetadata": 1}}
+	d, err := bencode.EncodeBytes(m)
+	if err != nil {
+		return []byte{}
+	}
+	body.Write(d)
+
+	data := bytes.NewBuffer([]byte{})
+	binary.Write(data, binary.BigEndian, uint32(body.Len()))
+	data.Write(body.Bytes())
+	return data.Bytes()
+}
+
+func PacketPiece(metadata byte, n int) []byte {
+	body := bytes.NewBuffer([]byte{})
+	body.WriteByte(MESSAGE_ID)
+	body.WriteByte(metadata)
+
+	m := map[string]interface{}{"msg_type": 1, "piece": n}
+	d, err := bencode.EncodeBytes(m)
+	if err != nil {
+		return []byte{}
+	}
+	body.Write(d)
+
+	data := bytes.NewBuffer([]byte{})
+	binary.Write(data, binary.BigEndian, uint32(body.Len()))
+	data.Write(body.Bytes())
+	return data.Bytes()
 }
