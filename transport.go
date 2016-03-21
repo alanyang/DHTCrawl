@@ -3,16 +3,17 @@ package DHTCrawl
 import (
 	"log"
 	"net"
+	"time"
 )
 
 type Transport struct {
-	Conn *net.TCPConn
+	Conn net.Conn
 	Hash Hash
 }
 
 func NewTransport(addr *net.TCPAddr, h Hash) (*Transport, error) {
 	tp := new(Transport)
-	conn, err := net.DialTCP("tcp", nil, addr)
+	conn, err := net.DialTimeout("tcp", addr.String(), time.Millisecond*500)
 	if err != nil {
 		return nil, err
 	}
@@ -23,12 +24,12 @@ func NewTransport(addr *net.TCPAddr, h Hash) (*Transport, error) {
 }
 
 func (t *Transport) ReadData() {
-	buf := make([]byte, 2048)
+	b := make([]byte, 2048)
 	for {
-		n, err := t.Conn.Read(buf[:])
+		n, err := t.Conn.Read(b)
 		if err != nil {
 			break
 		}
-		log.Println(buf[:n])
+		log.Println(b[:n])
 	}
 }
