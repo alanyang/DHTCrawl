@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-const (
-	MAX_COUNT = 500
-)
-
 type (
 	NodeID []byte
 

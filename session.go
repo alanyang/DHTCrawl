@@ -20,13 +20,18 @@ type Session struct {
 	rpc    *RPC
 }
 
-func NewSession() (*Session, error) {
-	addr := &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: 63309}
-	// addr := new(net.UDPAddr)
+func NewSession(port int) (*Session, error) {
+	var addr *net.UDPAddr
+	if port == 0 {
+		addr = new(net.UDPAddr)
+	} else {
+		addr = &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: port}
+	}
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		return nil, err
 	}
+
 	session := &Session{Conn: conn, result: make(chan *Result), rpc: NewRPC()}
 	log.Printf("Start Crawl on %s", conn.LocalAddr().String())
 	go session.serve()

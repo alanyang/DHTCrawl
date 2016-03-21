@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
+	"strings"
 	"sync/atomic"
 )
 
@@ -58,4 +60,12 @@ func convertIPPort(buf *bytes.Buffer, ip net.IP, port int) {
 
 func GenerateTid() string {
 	return fmt.Sprintf("%d", atomic.AddUint32(&tid, 1)%math.MaxInt16)
+}
+func StringToIPBytes(ip string) (b []byte) {
+	s := strings.Split(ip, ".")
+	for _, i := range s {
+		p, _ := strconv.Atoi(i)
+		b = append(b, byte(p))
+	}
+	return
 }

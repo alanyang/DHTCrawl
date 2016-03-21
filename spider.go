@@ -4,6 +4,8 @@ import (
 	// "github.com/prestonTao/upnp"
 	//"runtime"
 	//"string"
+	"fmt"
+	"github.com/valyala/gorpc"
 	"log"
 	"net"
 	"time"
@@ -17,21 +19,38 @@ type (
 		Table      *Table
 		Bootstraps []string
 		Token      *Token
-		Wire       *Wire
 		Handler    HandlerEnsureHash
+		RPCClient  *gorpc.Client
+	}
+
+	DHTConfig struct {
+		RemoteServer  string //fetch metainfo server address
+		Port          int    //DHT UDP listen port
+		TokenValidity int    //token validity (minute)
 	}
 )
 
-func NewDHT() *DHT {
-	session, err := NewSession()
+func NewDefaultConfig() *DHTConfig {
+	return &DHTConfig{
+		RemoteServer:  "127.0.0.1:1128",
+		TokenValidity: 5,
+		Port:          2412,
+	}
+}
+
+func NewDHT(cfg *DHTConfig) *DHT {
+	if cfg == nil {
+		cfg = NewDefaultConfig()
+	}
+	session, err := NewSession(cfg.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
 	return &DHT{
-		Session: session,
-		Table:   NewTable(),
-		Token:   NewToken(20),
-		Wire:    NewWire(),
+		Session:   session,
+		Table:     NewTable(),
+		Token:     NewToken(cfg.TokenValidity),
+		RPCClient: gorpc.NewTCPClient(cfg.RemoteServer),
 		Bootstraps: []string{
 			"67.215.246.10:6881",
 			"212.129.33.50:6881",
@@ -41,18 +60,11 @@ func NewDHT() *DHT {
 }
 
 func (d *DHT) Run() {
-	// if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
-	// 	l := d.Session.Conn.LocalAddr().String()
-	// 	ls := strings.Split(l, ":")
-	// 	UDPPort, _ := strconv.Atoi(ls[len(ls)-1])
-	// 	mapping := new(upnp.Upnp)
-	// 	if err := mapping.AddPortMapping(UDPPort, UDPPort, "UDP"); err == nil {
-	// 		log.Println("UPnP Plugin is running")
-	// 	} else {
-	// 		log.Fatal("UPnP start error")
-	// 	}
-	// }
 	go d.Walk()
+
+	d.RPCClient.Start()
+	defer d.RPCClient.Stop()
+	dc := Dispatcher.NewServiceClient("FetchMetaInfo", d.RPCClient)
 	for {
 		r := <-d.Session.result
 		switch r.Cmd {
@@ -70,10 +82,12 @@ func (d *DHT) Run() {
 				d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
 			}
 			if d.Handler != nil {
-				need := d.Handler(r.Hash)
-				if need {
-					//fetch metadata info from tcp port (bep_09, bep_10)
-					d.Wire.AddJob(r.Hash, r.TCPAddr)
+				if d.Handler != nil {
+					need := d.Handler(r.Hash)
+					if need {
+						//fetch metadata info from tcp port (bep_09, bep_10)
+						dc.CallAsync("Fetch", fmt.Sprintf("%X|%s", []byte(r.Hash), r.TCPAddr.String()))
+					}
 				}
 			}
 		}
