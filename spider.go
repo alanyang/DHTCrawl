@@ -61,6 +61,7 @@ func NewDHT(cfg *DHTConfig) *DHT {
 
 func (d *DHT) Run() {
 	go d.Walk()
+	t := NewTransport()
 
 	// d.RPCClient.Start()
 	// defer d.RPCClient.Stop()
@@ -83,8 +84,7 @@ func (d *DHT) Run() {
 					if need {
 						//fetch metadata info from tcp port (bep_09, bep_10)
 						// dc.CallAsync("Fetch", fmt.Sprintf("%X|%s", []byte(r.Hash), r.TCPAddr.String()))
-						_, err := NewWire(r.Hash, r.TCPAddr)
-						log.Println(err, "connect error!")
+						t.ClientChan <- &Client{Addr: r.TCPAddr, Hash: r.Hash}
 					}
 				}
 			}

@@ -32,6 +32,10 @@ var (
 )
 
 type (
+	Client struct {
+		Addr *net.TCPAddr
+		Hash Hash
+	}
 	Wire struct {
 		Conn      net.Conn
 		Hash      Hash
@@ -43,7 +47,28 @@ type (
 		recvChunk int
 		Result    chan map[string]interface{}
 	}
+
+	Transport struct {
+		ClientChan chan *Client
+	}
 )
+
+func NewTransport() *Transport {
+	t := &Transport{ClientChan: make(chan *Client, 200)}
+	go t.forever()
+	return t
+}
+
+func (t *Transport) forever() {
+	for {
+		cl := <-t.ClientChan
+		w, err := NewWire(cl.Hash, cl.Addr)
+		if err != nil {
+			log.Println(err, "Connection error!!!")
+		}
+		w.SendHandshake()
+	}
+}
 
 func NewWire(hash Hash, addr *net.TCPAddr) (*Wire, error) {
 	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*3)
