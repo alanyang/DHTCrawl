@@ -46,12 +46,13 @@ type (
 )
 
 func NewWire(hash Hash, addr *net.TCPAddr) (*Wire, error) {
-	conn, err := net.DialTimeout("tcp", addr.String(), time.Second)
+	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*3)
 	if err != nil {
 		return nil, err
 	}
 	wire := &Wire{Conn: conn, chunk: []byte{}, Hash: hash, Result: make(chan map[string]interface{})}
 	go wire.read()
+	wire.SendHandshake()
 	return wire, nil
 }
 
@@ -62,6 +63,7 @@ func (w *Wire) SendHandshake() {
 	data.Write(BtReserved)
 	data.Write([]byte(w.Hash))
 	data.Write([]byte(NewNodeID()))
+	log.Println(data.Bytes())
 	w.Conn.Write(data.Bytes())
 	w.step = StepHandshake
 }
