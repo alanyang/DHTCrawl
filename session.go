@@ -45,7 +45,7 @@ func (s *Session) serve() {
 		if err != nil {
 			continue
 		}
-		r, err := s.rpc.parse(string(buf), addr)
+		r, err := s.rpc.parse(buf, addr)
 		if err != nil {
 			continue
 		}

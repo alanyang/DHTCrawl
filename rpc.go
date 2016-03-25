@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/zeebo/bencode"
 	"net"
+	// "reflect"
 )
 
 const (
@@ -92,6 +93,12 @@ func (r *RPC) HandleAnnoucePeer(args map[string]interface{}) (hash Hash, port in
 	}
 	port, _ = args["port"].(int64)
 	token, _ = args["token"].(string)
+
+	//if implied_port not equal 0, then use same udp port for tcp
+	if implied, ok := args["implied_port"].(int64); ok && implied != int64(0) {
+		port = int64(-1)
+	}
+
 	return
 }
 
@@ -106,10 +113,11 @@ func (r *RPC) HandleFindNode(resp map[string]interface{}) (ns []*Node) {
 	return
 }
 
-func (r *RPC) parse(data string, addr *net.UDPAddr) (*Result, error) {
+func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 	v := make(map[string]interface{})
 
-	if err := bencode.DecodeString(data, &v); err != nil {
+	if err := bencode.DecodeBytes(data, &v); err != nil {
+		println(err)
 		return nil, err
 	}
 
@@ -141,6 +149,9 @@ func (r *RPC) parse(data string, addr *net.UDPAddr) (*Result, error) {
 			}
 		case OP_ANNOUNCE_PEER:
 			hash, port, token := r.HandleAnnoucePeer(a)
+			if port == int64(-1) {
+				port = int64(addr.Port)
+			}
 			if hash != nil && IsValidPort(int(port)) {
 				tcpAddr := &net.TCPAddr{IP: addr.IP, Port: int(port)}
 				return &Result{

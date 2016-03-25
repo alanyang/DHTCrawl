@@ -8,10 +8,13 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 )
 
 type (
+	EachHandler func(*Node, int)
+
 	NodeID []byte
 
 	Hash NodeID
@@ -25,6 +28,7 @@ type (
 		Nodes []*Node
 		Last  []*Node
 		Self  NodeID
+		Mutex *sync.RWMutex
 	}
 )
 
@@ -69,13 +73,30 @@ func NewNode() *Node {
 }
 
 func NewTable() *Table {
-	return &Table{Nodes: []*Node{}, Self: NewNodeID()}
+	return &Table{Nodes: []*Node{}, Self: NewNodeID(), Mutex: new(sync.RWMutex)}
+}
+
+func (t *Table) Flush() {
+	t.Mutex.Lock()
+	defer t.Mutex.Unlock()
+	t.Nodes = []*Node{}
 }
 
 func (t *Table) Add(node *Node) {
+	t.Mutex.Lock()
+	defer t.Mutex.Unlock()
 	t.Nodes = append(t.Nodes, node)
 	t.Last = append(t.Last, node)
 	if len(t.Last) > 8 {
 		t.Last = t.Last[1:]
+	}
+}
+
+func (t *Table) Each(handler EachHandler) {
+	t.Mutex.RLock()
+	nodes := t.Nodes[:]
+	t.Mutex.RUnlock()
+	for i, node := range nodes {
+		handler(node, i)
 	}
 }

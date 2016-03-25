@@ -4,7 +4,7 @@ import (
 	// "github.com/prestonTao/upnp"
 	//"runtime"
 	//"string"
-	"fmt"
+	// "fmt"
 	"github.com/valyala/gorpc"
 	"log"
 	"net"
@@ -62,31 +62,29 @@ func NewDHT(cfg *DHTConfig) *DHT {
 func (d *DHT) Run() {
 	go d.Walk()
 
-	d.RPCClient.Start()
-	defer d.RPCClient.Stop()
-	dc := Dispatcher.NewServiceClient("FetchMetaInfo", d.RPCClient)
-	for {
-		r := <-d.Session.result
+	// d.RPCClient.Start()
+	// defer d.RPCClient.Stop()
+	// dc := Dispatcher.NewServiceClient("FetchMetaInfo", d.RPCClient)
+	for r := range d.Session.result {
 		switch r.Cmd {
 		case OP_FIND_NODE:
 			for _, node := range r.Nodes {
 				d.Table.Add(node)
 			}
-
 		case OP_GET_PEERS:
 			ns := ConvertByteStream(d.Table.Last)
 			d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
 
 		case OP_ANNOUNCE_PEER:
-			if d.Token.Value == r.Token {
+			if d.Token.IsValid(r.Token) {
 				d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
-			}
-			if d.Handler != nil {
 				if d.Handler != nil {
 					need := d.Handler(r.Hash)
 					if need {
 						//fetch metadata info from tcp port (bep_09, bep_10)
-						dc.CallAsync("Fetch", fmt.Sprintf("%X|%s", []byte(r.Hash), r.TCPAddr.String()))
+						// dc.CallAsync("Fetch", fmt.Sprintf("%X|%s", []byte(r.Hash), r.TCPAddr.String()))
+						_, err := NewWire(r.Hash, r.TCPAddr)
+						log.Println(err)
 					}
 				}
 			}
@@ -106,14 +104,24 @@ func (d *DHT) Join() {
 
 func (d *DHT) Walk() {
 	for {
-		if len(d.Table.Nodes) == 0 {
+		if len(d.Table.Nodes) == 0 || d.Table.Nodes == nil {
 			d.Join()
+			time.Sleep(time.Millisecond * 800)
 		} else {
-			for _, node := range d.Table.Nodes {
+			// d.Table.Mutex.Lock()
+			// nodes := d.Table.Nodes[:]
+			// d.Table.Mutex.Unlock()
+			// for _, node := range nodes {
+			// 	if node != nil {
+			// 		d.Session.SendTo(PacketFindNode(node.ID.Neighbor(), NewNodeID()), node.Addr)
+			// 		time.Sleep(time.Millisecond * 2)
+			// 	}
+			// }
+			d.Table.Each(func(node *Node, _ int) {
 				d.Session.SendTo(PacketFindNode(node.ID.Neighbor(), NewNodeID()), node.Addr)
-				time.Sleep(time.Millisecond)
-			}
-			d.Table.Nodes = nil
+				time.Sleep(time.Millisecond * 2)
+			})
+			d.Table.Flush()
 		}
 	}
 }
