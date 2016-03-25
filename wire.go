@@ -52,7 +52,6 @@ func NewWire(hash Hash, addr *net.TCPAddr) (*Wire, error) {
 	}
 	wire := &Wire{Conn: conn, chunk: []byte{}, Hash: hash, Result: make(chan map[string]interface{})}
 	go wire.read()
-	wire.SendHandshake()
 	return wire, nil
 }
 
@@ -63,7 +62,7 @@ func (w *Wire) SendHandshake() {
 	data.Write(BtReserved)
 	data.Write([]byte(w.Hash))
 	data.Write([]byte(NewNodeID()))
-	log.Println(data.Bytes())
+	log.Println(data.Bytes(), len(data.Bytes()))
 	w.Conn.Write(data.Bytes())
 	w.step = StepHandshake
 }
@@ -101,18 +100,19 @@ func (w *Wire) RequestPiece(p int) {
 }
 
 func (w *Wire) read() {
-	buf := make([]byte, 1024)
-	for w.step != StepDone && w.step != StepOver {
+	buf := make([]byte, 2048)
+	for {
 		n, err := w.Conn.Read(buf)
 		if err != nil {
 			//fail
-			log.Println(err)
+			log.Println(err, "read error!!!")
 			break
 		}
+		log.Println(buf, "recv")
 		w.chunk = append(w.chunk, buf[:n]...)
-		log.Println(w.chunk)
 		w.parse()
 	}
+	w.Conn.Close()
 }
 
 func (w *Wire) parse() {
@@ -212,7 +212,7 @@ func (w *Wire) handleExtension(ext map[string]interface{}) {
 func (w *Wire) handlePiece(b []byte) {
 	bs := bytes.Split(b, []byte{101, 101})
 	msg := make(map[string]interface{})
-	err := bencode.DecodeBytes(bs[0], &msg)
+	err := bencode.DecodeBytes(append(bs[0], []byte{101, 101}...), &msg)
 	if err != nil {
 		w.step = StepOver
 		return

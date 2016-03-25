@@ -84,7 +84,7 @@ func (d *DHT) Run() {
 						//fetch metadata info from tcp port (bep_09, bep_10)
 						// dc.CallAsync("Fetch", fmt.Sprintf("%X|%s", []byte(r.Hash), r.TCPAddr.String()))
 						_, err := NewWire(r.Hash, r.TCPAddr)
-						log.Println(err)
+						log.Println(err, "connect error!")
 					}
 				}
 			}
