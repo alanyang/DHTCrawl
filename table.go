@@ -17,7 +17,7 @@ type (
 
 	NodeID []byte
 
-	Hash NodeID
+	Hash string
 
 	Node struct {
 		ID   NodeID
@@ -54,6 +54,10 @@ func NewNodeIDFromHex(hex string) NodeID {
 		j++
 	}
 	return id
+}
+
+func (h Hash) Hex() string {
+	return fmt.Sprintf("%X", []byte(h))
 }
 
 func (n NodeID) String() string {

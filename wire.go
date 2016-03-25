@@ -64,7 +64,7 @@ func (t *Transport) forever() {
 		cl := <-t.ClientChan
 		w, err := NewWire(cl.Hash, cl.Addr)
 		if err != nil {
-			log.Println(err, "Connection error!!!")
+			continue
 		}
 		w.SendHandshake()
 	}
@@ -85,9 +85,8 @@ func (w *Wire) SendHandshake() {
 	data.WriteByte(byte(len(BtProtocol)))
 	data.WriteString(BtProtocol)
 	data.Write(BtReserved)
-	data.Write([]byte(w.Hash))
+	data.WriteString(string(w.Hash))
 	data.Write([]byte(NewNodeID()))
-	log.Println(data.Bytes(), len(data.Bytes()))
 	w.Conn.Write(data.Bytes())
 	w.step = StepHandshake
 }
@@ -133,7 +132,7 @@ func (w *Wire) read() {
 			log.Println(err, "read error!!!")
 			break
 		}
-		log.Println(buf, "recv")
+		// log.Println(buf[:n], string(buf[:n]), "Recv!!")
 		w.chunk = append(w.chunk, buf[:n]...)
 		w.parse()
 	}
@@ -141,15 +140,19 @@ func (w *Wire) read() {
 }
 
 func (w *Wire) parse() {
+	var err error
 	switch w.step {
 	case StepHandshake:
-		w.handleHandshake()
+		err = w.handleHandshake()
 	case StepExtension:
-		w.handleMessage()
+		err = w.handleMessage()
 	case StepDone:
 		w.handleDone()
 	case StepOver:
 		w.handleOver()
+	}
+	if err != nil {
+		log.Println("decode error", err)
 	}
 }
 
@@ -172,6 +175,7 @@ func (w *Wire) handleHandshake() error {
 		return errors.New("Peer choking")
 	}
 	w.chunk = w.chunk[68:]
+	log.Println("recv handshake done! send extension", w.Conn.RemoteAddr().String())
 	w.SendExtension()
 	return nil
 }
@@ -186,6 +190,7 @@ func (w *Wire) handleMessage() error {
 	if uint32(len(w.chunk)) < pl-uint32(4) {
 		return nil
 	}
+	log.Println(w.chunk[:12])
 	mid, _ := r.ReadByte()
 	if mid != BtExtensionID {
 		w.step = StepOver
@@ -195,7 +200,7 @@ func (w *Wire) handleMessage() error {
 	ext, _ := r.ReadByte()
 	b := make([]byte, pl-2)
 	r.Read(b)
-	if ext == 0 {
+	if ext == byte(0) {
 		meta := make(map[string]interface{})
 		err := bencode.DecodeBytes(b, &meta)
 		if err != nil {
@@ -212,10 +217,12 @@ func (w *Wire) handleMessage() error {
 
 func (w *Wire) handleExtension(ext map[string]interface{}) {
 	var num int
+	log.Println(ext)
 	if size, ok := ext["metadata_size"].(int64); ok {
 		if m, ok := ext["m"].(map[string]interface{}); ok {
 			if meta, ok := m["ut_metadata"].(int64); ok {
 				w.meta = int(meta)
+				log.Println(w.meta, "meta")
 				w.size = int(size)
 				num = int(math.Ceil(float64(w.size) / float64(PieceLength)))
 				w.metaChunk = [][]byte{}
@@ -229,6 +236,7 @@ func (w *Wire) handleExtension(ext map[string]interface{}) {
 		w.step = StepOver
 		return
 	}
+	log.Println("recv extension done! request piece", w.Conn.RemoteAddr().String())
 	for i := 0; i < num; i++ {
 		w.RequestPiece(i)
 	}
@@ -260,6 +268,7 @@ func (w *Wire) handlePiece(b []byte) {
 
 	w.metaChunk[int(piece)] = bs[1]
 	w.recvChunk++
+	log.Println("recv piece done!", w.Conn.RemoteAddr().String())
 	if len(w.metaChunk) == w.recvChunk {
 		w.step = StepDone
 		return

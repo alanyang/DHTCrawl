@@ -83,7 +83,7 @@ func (r *RPC) HandleGetPeers(args map[string]interface{}) Hash {
 	if hash, ok := args["info_hash"].(string); ok {
 		return Hash(hash)
 	}
-	return nil
+	return ""
 }
 
 //info hash, tcp port, token
@@ -144,7 +144,7 @@ func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 		switch q {
 		case OP_GET_PEERS:
 			hash := r.HandleGetPeers(a)
-			if hash != nil {
+			if string(hash) != "" {
 				return &Result{Cmd: OP_GET_PEERS, UDPAddr: addr, Hash: hash, Tid: t}, nil
 			}
 		case OP_ANNOUNCE_PEER:
@@ -152,7 +152,7 @@ func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 			if port == int64(-1) {
 				port = int64(addr.Port)
 			}
-			if hash != nil && IsValidPort(int(port)) {
+			if string(hash) != "" && IsValidPort(int(port)) {
 				tcpAddr := &net.TCPAddr{IP: addr.IP, Port: int(port)}
 				return &Result{
 					Cmd:     OP_ANNOUNCE_PEER,
