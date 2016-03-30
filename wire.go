@@ -54,7 +54,7 @@ type (
 )
 
 func NewTransport() *Transport {
-	t := &Transport{ClientChan: make(chan *Client, 200)}
+	t := &Transport{ClientChan: make(chan *Client, 500)}
 	go t.forever()
 	return t
 }
@@ -71,7 +71,7 @@ func (t *Transport) forever() {
 }
 
 func NewWire(hash Hash, addr *net.TCPAddr) (*Wire, error) {
-	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*3)
+	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*2)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (w *Wire) read() {
 			log.Println(err, "read error!!!")
 			break
 		}
-		// log.Println(buf[:n], string(buf[:n]), "Recv!!")
+		log.Println(buf[:n], string(buf[:n]), "Recv!!")
 		w.chunk = append(w.chunk, buf[:n]...)
 		w.parse()
 	}
@@ -145,6 +145,8 @@ func (w *Wire) parse() {
 	case StepHandshake:
 		err = w.handleHandshake()
 	case StepExtension:
+		err = w.handleMessage()
+	case StepPiece:
 		err = w.handleMessage()
 	case StepDone:
 		w.handleDone()
@@ -174,7 +176,7 @@ func (w *Wire) handleHandshake() error {
 		w.step = StepOver
 		return errors.New("Peer choking")
 	}
-	w.chunk = w.chunk[68:]
+	w.chunk = []byte{}
 	log.Println("recv handshake done! send extension", w.Conn.RemoteAddr().String())
 	w.SendExtension()
 	return nil
@@ -190,7 +192,8 @@ func (w *Wire) handleMessage() error {
 	if uint32(len(w.chunk)) < pl-uint32(4) {
 		return nil
 	}
-	log.Println(w.chunk[:12])
+	log.Println(string(w.chunk[:pl-4]))
+	log.Println(w.chunk[:20])
 	mid, _ := r.ReadByte()
 	if mid != BtExtensionID {
 		w.step = StepOver
@@ -243,6 +246,7 @@ func (w *Wire) handleExtension(ext map[string]interface{}) {
 }
 
 func (w *Wire) handlePiece(b []byte) {
+	log.Println("in to handle piece", b)
 	bs := bytes.Split(b, []byte{101, 101})
 	msg := make(map[string]interface{})
 	err := bencode.DecodeBytes(append(bs[0], []byte{101, 101}...), &msg)
