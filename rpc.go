@@ -117,7 +117,6 @@ func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 	v := make(map[string]interface{})
 
 	if err := bencode.DecodeBytes(data, &v); err != nil {
-		println(err)
 		return nil, err
 	}
 

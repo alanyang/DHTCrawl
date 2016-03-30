@@ -72,6 +72,10 @@ func (n NodeID) Neighbor() NodeID {
 	return append(n[:12], NewNodeID()[:8]...)
 }
 
+func (h Hash) Hex() string {
+	return fmt.Sprintf("%X", []byte(h))
+}
+
 func NewNode() *Node {
 	return &Node{ID: NewNodeID()}
 }

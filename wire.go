@@ -122,6 +122,7 @@ func (w *Wire) RequestPiece(p int) {
 	w.Conn.Write(data.Bytes())
 	log.Println("Send request piece")
 	log.Println(data.Bytes())
+	//[0 0 0 27 20 2 100 56 58 109 115 103 95 116 121 112 101 105 48 101 53 58 112 105 101 99 101 105 48 101 101]
 	w.step = StepPiece
 }
 
@@ -194,8 +195,8 @@ func (w *Wire) handleMessage() error {
 	if uint32(len(w.chunk)) < pl-uint32(4) {
 		return nil
 	}
-	log.Println(string(w.chunk[:pl-4]))
-	log.Println(w.chunk[:20])
+	// log.Println(string(w.chunk[:pl-4]))
+	// log.Println(w.chunk[:20])
 	mid, _ := r.ReadByte()
 	if mid != BtExtensionID {
 		w.step = StepOver
@@ -203,18 +204,19 @@ func (w *Wire) handleMessage() error {
 	}
 
 	ext, _ := r.ReadByte()
-	b := make([]byte, pl-2)
-	r.Read(b)
+	body := make([]byte, pl-2)
+	r.Read(body)
+	log.Printf("ext == %d", ext)
 	if ext == byte(0) {
 		meta := make(map[string]interface{})
-		err := bencode.DecodeBytes(b, &meta)
+		err := bencode.DecodeBytes(body, &meta)
 		if err != nil {
 			w.step = StepOver
 			return errors.New("Decode meta error")
 		}
 		w.handleExtension(meta)
 	} else {
-		w.handlePiece(b)
+		w.handlePiece(body)
 	}
 	w.chunk = w.chunk[pl+4:]
 	return nil
