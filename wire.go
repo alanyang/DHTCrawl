@@ -41,7 +41,7 @@ type (
 		Hash      Hash
 		chunk     []byte
 		step      int
-		meta      int
+		umetadata int
 		size      int
 		metaChunk [][]byte
 		recvChunk int
@@ -110,7 +110,7 @@ func (w *Wire) SendExtension() {
 func (w *Wire) RequestPiece(p int) {
 	body := bytes.NewBuffer([]byte{})
 	body.WriteByte(BtExtensionID)
-	body.WriteByte(byte(w.meta))
+	body.WriteByte(byte(w.umetadata))
 
 	meta, _ := bencode.EncodeBytes(map[string]interface{}{"msg_type": 0, "piece": p})
 	body.Write(meta)
@@ -150,6 +150,7 @@ func (w *Wire) parse() {
 	case StepExtension:
 		err = w.handleMessage()
 	case StepPiece:
+		log.Println("handle piece")
 		err = w.handleMessage()
 	case StepDone:
 		w.handleDone()
@@ -228,8 +229,7 @@ func (w *Wire) handleExtension(ext map[string]interface{}) {
 	if size, ok := ext["metadata_size"].(int64); ok {
 		if m, ok := ext["m"].(map[string]interface{}); ok {
 			if meta, ok := m["ut_metadata"].(int64); ok {
-				w.meta = int(meta)
-				log.Println(w.meta, "meta")
+				w.umetadata = int(meta)
 				w.size = int(size)
 				num = int(math.Ceil(float64(w.size) / float64(PieceLength)))
 				w.metaChunk = [][]byte{}
@@ -239,7 +239,7 @@ func (w *Wire) handleExtension(ext map[string]interface{}) {
 			}
 		}
 	}
-	if w.meta == 0 || w.size == 0 || w.size > MaxMetaSize {
+	if w.umetadata == 0 || w.size == 0 || w.size > MaxMetaSize {
 		w.step = StepOver
 		return
 	}
