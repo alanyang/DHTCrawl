@@ -235,7 +235,8 @@ func (w *Wire) handleExtension(ext map[string]interface{}) {
 				w.umetadata = int(meta)
 				w.size = int(size)
 				num = int(math.Ceil(float64(w.size) / float64(PieceLength)))
-				w.metaChunk = make([][]byte, num)
+				log.Println(w.size, PieceLength, num)
+				w.metaChunk = []byte{}
 				for i := 0; i < num; i++ {
 					w.metaChunk = append(w.metaChunk, []byte{})
 				}
