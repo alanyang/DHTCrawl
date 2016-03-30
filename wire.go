@@ -152,6 +152,7 @@ func (w *Wire) parse() {
 		err = w.handleMessage()
 	}
 	if err != nil {
+		log.Println(err.Error())
 		w.handleOver()
 		w.Conn.Close()
 	}
@@ -207,8 +208,6 @@ func (w *Wire) handleMessage() error {
 	body := make([]byte, length-2)
 	r.Read(body)
 
-	w.chunk = w.chunk[length+4:]
-
 	if ext == byte(0) {
 		meta := make(map[string]interface{})
 		err := bencode.DecodeBytes(body, &meta)
@@ -216,9 +215,11 @@ func (w *Wire) handleMessage() error {
 			w.step = StepOver
 			return errors.New("Decode meta error")
 		}
+		w.chunk = []byte{}
 		w.handleExtension(meta)
 	} else {
 		log.Println("into piece handler")
+		w.chunk = w.chunk[length+4:]
 		w.handlePiece(body)
 	}
 	return nil
