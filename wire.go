@@ -207,7 +207,7 @@ func (w *Wire) handleMessage() error {
 	body := make([]byte, length-2)
 	r.Read(body)
 
-	w.chunk = []byte{}
+	w.chunk = w.chunk[length+4:]
 
 	if ext == byte(0) {
 		meta := make(map[string]interface{})
@@ -297,7 +297,6 @@ func (w *Wire) handleDone() {
 		log.Println(k)
 		log.Println(v)
 	}
-	log.Fatal("debug")
 	w.Result <- meta
 }
 
