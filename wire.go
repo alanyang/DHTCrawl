@@ -236,7 +236,7 @@ func (w *Wire) handleExtension(ext map[string]interface{}) {
 				w.size = int(size)
 				num = int(math.Ceil(float64(w.size) / float64(PieceLength)))
 				log.Println(w.size, PieceLength, num)
-				w.metaChunk = []byte{}
+				w.metaChunk = [][]byte{}
 				for i := 0; i < num; i++ {
 					w.metaChunk = append(w.metaChunk, []byte{})
 				}
