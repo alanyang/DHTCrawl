@@ -12,12 +12,14 @@ import (
 )
 
 const (
-	StepHandshake = 0
-	StepExtension = 1
-	StepPiece     = 2
-	StepDone      = 3
-	StepOver      = 9
+	StepHandshake = iota
+	StepExtension
+	StepPiece
+	StepDone
+	StepOver
+)
 
+const (
 	BtProtocol    = "BitTorrent protocol"
 	PieceLength   = 16384
 	HandshakeID   = byte(0)
@@ -199,7 +201,7 @@ func (w *Wire) handleMessage() error {
 	// log.Println(string(w.chunk[:pl-4]))
 	// log.Println(w.chunk[:20])
 	mid, _ := r.ReadByte()
-	if mid != BtExtensionID {
+	if mid != BtExtensionID && w.step != StepPiece {
 		w.step = StepOver
 		return errors.New("Unknow protocol id")
 	}
