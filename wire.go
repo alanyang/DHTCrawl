@@ -1,7 +1,6 @@
 package DHTCrawl
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -43,7 +42,6 @@ type (
 		Conn      net.Conn
 		Hash      Hash
 		chunk     []byte
-		reader    *bufio.Reader
 		step      int
 		umetadata int
 		size      int
@@ -128,9 +126,8 @@ func (w *Wire) RequestPiece(p int) {
 }
 
 func (w *Wire) read() {
-	buf := make([]byte, 2048)
-	bufio.NewReader(w.Conn)
 	for {
+		buf := make([]byte, 4096)
 		n, err := w.Conn.Read(buf)
 		if err != nil {
 			//fail
