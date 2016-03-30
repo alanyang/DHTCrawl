@@ -56,10 +56,6 @@ func NewNodeIDFromHex(hex string) NodeID {
 	return id
 }
 
-func (h Hash) Hex() string {
-	return fmt.Sprintf("%X", []byte(h))
-}
-
 func (n NodeID) String() string {
 	return bytes.NewBuffer(n).String()
 }
@@ -73,6 +69,7 @@ func (n NodeID) Neighbor() NodeID {
 }
 
 func (h Hash) Hex() string {
+
 	return fmt.Sprintf("%X", []byte(h))
 }
 
