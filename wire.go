@@ -150,12 +150,9 @@ func (w *Wire) parse() {
 		err = w.handleMessage()
 	case StepPiece:
 		err = w.handleMessage()
-	case StepDone:
-		w.handleDone()
-	case StepOver:
-		w.handleOver()
 	}
 	if err != nil {
+		w.handleOver()
 		w.Conn.Close()
 	}
 }
@@ -282,6 +279,7 @@ func (w *Wire) handlePiece(b []byte) {
 	log.Println("recv piece done!", w.Conn.RemoteAddr().String(), w.recvChunk, len(w.metaChunk))
 	if len(w.metaChunk) == w.recvChunk {
 		w.step = StepDone
+		w.handleDone()
 	}
 }
 
