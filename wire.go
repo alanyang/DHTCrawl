@@ -134,7 +134,7 @@ func (w *Wire) read() {
 			// log.Println(err, "read error!!!")
 			break
 		}
-		log.Println(string(buf[:n]), "Recv!!")
+		// log.Println(string(buf[:n]), "Recv!!")
 		w.chunk = append(w.chunk, buf[:n]...)
 		w.parse()
 	}
@@ -205,6 +205,7 @@ func (w *Wire) handleMessage() error {
 	body := make([]byte, pl-2)
 	r.Read(body)
 	if w.step == StepPiece {
+		log.Printf("extension === %d", ext)
 		log.Println(body)
 		log.Println(string(body))
 	}
