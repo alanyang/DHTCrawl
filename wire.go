@@ -122,8 +122,8 @@ func (w *Wire) RequestPiece(p int) {
 	data.Write(body.Bytes())
 
 	w.Conn.Write(data.Bytes())
-	log.Println("Send request piece")
-	log.Println(data.Bytes())
+	// log.Println("Send request piece")
+	// log.Println(data.Bytes())
 	//[0 0 0 27 20 2 100 56 58 109 115 103 95 116 121 112 101 105 48 101 53 58 112 105 101 99 101 105 48 101 101]
 	w.step = StepPiece
 }
@@ -137,7 +137,7 @@ func (w *Wire) read() {
 			// log.Println(err, "read error!!!")
 			break
 		}
-		// log.Println(buf[:n], string(buf[:n]), "Recv!!")
+		log.Println(string(buf[:n]), "Recv!!")
 		w.chunk = append(w.chunk, buf[:n]...)
 		w.parse()
 	}
@@ -183,7 +183,6 @@ func (w *Wire) handleHandshake() error {
 		return errors.New("Peer choking")
 	}
 	w.chunk = []byte{}
-	// log.Println("recv handshake done! send extension", w.Conn.RemoteAddr().String())
 	w.SendExtension()
 	return nil
 }
