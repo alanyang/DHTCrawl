@@ -210,6 +210,8 @@ func (w *Wire) handleMessage() error {
 	body := make([]byte, length-2)
 	r.Read(body)
 
+	w.chunk = []byte{}
+
 	if ext == byte(0) {
 		meta := make(map[string]interface{})
 		err := bencode.DecodeBytes(body, &meta)
@@ -222,7 +224,6 @@ func (w *Wire) handleMessage() error {
 		log.Println("into piece handler")
 		w.handlePiece(body)
 	}
-	w.chunk = w.chunk[length+4:]
 	return nil
 }
 
