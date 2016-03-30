@@ -253,7 +253,6 @@ func (w *Wire) handleExtension(ext map[string]interface{}) {
 }
 
 func (w *Wire) handlePiece(b []byte) {
-	log.Println("in to handle piece", b)
 	bs := bytes.Split(b, []byte{101, 101})
 	msg := make(map[string]interface{})
 	err := bencode.DecodeBytes(append(bs[0], []byte{101, 101}...), &msg)
@@ -279,10 +278,9 @@ func (w *Wire) handlePiece(b []byte) {
 
 	w.metaChunk[int(piece)] = bs[1]
 	w.recvChunk++
-	log.Println("recv piece done!", w.Conn.RemoteAddr().String())
+	log.Println("recv piece done!", w.Conn.RemoteAddr().String(), w.recvChunk, len(w.metaChunk))
 	if len(w.metaChunk) == w.recvChunk {
 		w.step = StepDone
-		return
 	}
 }
 
