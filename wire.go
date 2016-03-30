@@ -122,9 +122,6 @@ func (w *Wire) RequestPiece(p int) {
 	data.Write(body.Bytes())
 
 	w.Conn.Write(data.Bytes())
-	// log.Println("Send request piece")
-	// log.Println(data.Bytes())
-	//[0 0 0 27 20 2 100 56 58 109 115 103 95 116 121 112 101 105 48 101 53 58 112 105 101 99 101 105 48 101 101]
 	w.step = StepPiece
 }
 
@@ -152,7 +149,6 @@ func (w *Wire) parse() {
 	case StepExtension:
 		err = w.handleMessage()
 	case StepPiece:
-		log.Println("handle piece")
 		err = w.handleMessage()
 	case StepDone:
 		w.handleDone()
@@ -160,7 +156,7 @@ func (w *Wire) parse() {
 		w.handleOver()
 	}
 	if err != nil {
-		log.Println("decode error", err)
+		w.Conn.Close()
 	}
 }
 
@@ -200,7 +196,7 @@ func (w *Wire) handleMessage() error {
 	// log.Println(string(w.chunk[:pl-4]))
 	// log.Println(w.chunk[:20])
 	mid, _ := r.ReadByte()
-	if mid != BtExtensionID && w.step != StepPiece {
+	if mid != BtExtensionID {
 		w.step = StepOver
 		return errors.New("Unknow protocol id")
 	}
@@ -208,7 +204,10 @@ func (w *Wire) handleMessage() error {
 	ext, _ := r.ReadByte()
 	body := make([]byte, pl-2)
 	r.Read(body)
-	log.Printf("ext == %d", ext)
+	if w.step == StepPiece {
+		log.Println(body)
+		log.Println(string(body))
+	}
 	if ext == byte(0) {
 		meta := make(map[string]interface{})
 		err := bencode.DecodeBytes(body, &meta)
