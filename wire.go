@@ -288,10 +288,15 @@ func (w *Wire) handleDone() {
 	meta := map[string]interface{}{}
 	err := bencode.DecodeBytes(b, &meta)
 	if err != nil {
+		log.Printf("decode metadata %s", err.Error())
 		w.step = StepOver
 		return
 	}
-	log.Println(meta)
+	for k, v := range meta {
+		log.Println("*********")
+		log.Println(k)
+		log.Println(v)
+	}
 	log.Fatal("debug")
 	w.Result <- meta
 }
