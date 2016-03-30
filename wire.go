@@ -188,18 +188,13 @@ func (w *Wire) handleMessage() error {
 	r := bytes.NewReader(w.chunk)
 	var length uint32
 	binary.Read(r, binary.BigEndian, &length)
-	if uint32(len(w.chunk)) < length+uint32(4) {
+	if uint32(len(w.chunk)) < length-uint32(4) {
 		return nil
 	}
 	// log.Println(string(w.chunk[:pl-4]))
 	// log.Println(w.chunk[:20])
 	mid, _ := r.ReadByte()
 	if mid != BtExtensionID {
-		if w.step == StepPiece {
-			log.Println("***********")
-			log.Println(w.chunk)
-			log.Println(string(w.chunk))
-		}
 		w.step = StepOver
 		return errors.New("Unknow protocol id")
 	}
@@ -207,7 +202,7 @@ func (w *Wire) handleMessage() error {
 	ext, _ := r.ReadByte()
 	body := make([]byte, length-2)
 	r.Read(body)
-
+	w.chunk = w.chunk[length+4:]
 	if ext == byte(0) {
 		meta := make(map[string]interface{})
 		err := bencode.DecodeBytes(body, &meta)
@@ -215,11 +210,9 @@ func (w *Wire) handleMessage() error {
 			w.step = StepOver
 			return errors.New("Decode meta error")
 		}
-		w.chunk = []byte{}
 		w.handleExtension(meta)
 	} else {
 		log.Println("into piece handler")
-		w.chunk = w.chunk[length+4:]
 		w.handlePiece(body)
 	}
 	return nil
