@@ -188,27 +188,28 @@ func (w *Wire) handleMessage() error {
 		return nil
 	}
 	r := bytes.NewReader(w.chunk)
-	var pl uint32
-	binary.Read(r, binary.BigEndian, &pl)
-	if uint32(len(w.chunk)) < pl-uint32(4) {
+	var length uint32
+	binary.Read(r, binary.BigEndian, &length)
+	if uint32(len(w.chunk)) < length-uint32(4) {
 		return nil
 	}
 	// log.Println(string(w.chunk[:pl-4]))
 	// log.Println(w.chunk[:20])
 	mid, _ := r.ReadByte()
 	if mid != BtExtensionID {
+		if w.step == StepPiece {
+			log.Println("***********")
+			log.Println(body)
+			log.Println(string(body))
+		}
 		w.step = StepOver
 		return errors.New("Unknow protocol id")
 	}
 
 	ext, _ := r.ReadByte()
-	body := make([]byte, pl-2)
+	body := make([]byte, length-2)
 	r.Read(body)
-	if w.step == StepPiece {
-		log.Printf("extension === %d", ext)
-		log.Println(body)
-		log.Println(string(body))
-	}
+
 	if ext == byte(0) {
 		meta := make(map[string]interface{})
 		err := bencode.DecodeBytes(body, &meta)
@@ -218,22 +219,22 @@ func (w *Wire) handleMessage() error {
 		}
 		w.handleExtension(meta)
 	} else {
+		log.Println("into piece handler")
 		w.handlePiece(body)
 	}
-	w.chunk = w.chunk[pl+4:]
+	w.chunk = w.chunk[length+4:]
 	return nil
 }
 
 func (w *Wire) handleExtension(ext map[string]interface{}) {
 	var num int
-	log.Println(ext)
 	if size, ok := ext["metadata_size"].(int64); ok {
 		if m, ok := ext["m"].(map[string]interface{}); ok {
 			if meta, ok := m["ut_metadata"].(int64); ok {
 				w.umetadata = int(meta)
 				w.size = int(size)
 				num = int(math.Ceil(float64(w.size) / float64(PieceLength)))
-				w.metaChunk = [][]byte{}
+				w.metaChunk = make([][]byte, num)
 				for i := 0; i < num; i++ {
 					w.metaChunk = append(w.metaChunk, []byte{})
 				}
