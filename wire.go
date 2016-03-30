@@ -188,7 +188,7 @@ func (w *Wire) handleMessage() error {
 	r := bytes.NewReader(w.chunk)
 	var length uint32
 	binary.Read(r, binary.BigEndian, &length)
-	if uint32(len(w.chunk)) < length-uint32(4) {
+	if uint32(len(w.chunk)) < length+uint32(4) {
 		return nil
 	}
 	// log.Println(string(w.chunk[:pl-4]))
@@ -293,11 +293,7 @@ func (w *Wire) handleDone() {
 		w.step = StepOver
 		return
 	}
-	for k, v := range meta {
-		log.Println("*********")
-		log.Println(k)
-		log.Println(v)
-	}
+	log.Println(meta["info"])
 	w.Result <- meta
 }
 
