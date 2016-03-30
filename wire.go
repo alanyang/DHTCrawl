@@ -199,8 +199,8 @@ func (w *Wire) handleMessage() error {
 	if mid != BtExtensionID {
 		if w.step == StepPiece {
 			log.Println("***********")
-			log.Println(body)
-			log.Println(string(body))
+			log.Println(w.chunk)
+			log.Println(string(w.chunk))
 		}
 		w.step = StepOver
 		return errors.New("Unknow protocol id")
