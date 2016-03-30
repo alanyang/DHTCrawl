@@ -132,7 +132,7 @@ func (w *Wire) read() {
 			log.Println(err, "read error!!!")
 			break
 		}
-		log.Println(buf[:n], string(buf[:n]), "Recv!!")
+		// log.Println(buf[:n], string(buf[:n]), "Recv!!")
 		w.chunk = append(w.chunk, buf[:n]...)
 		w.parse()
 	}
@@ -241,6 +241,7 @@ func (w *Wire) handleExtension(ext map[string]interface{}) {
 	}
 	log.Println("recv extension done! request piece", w.Conn.RemoteAddr().String())
 	for i := 0; i < num; i++ {
+		log.Printf("Request piece %d", num)
 		w.RequestPiece(i)
 	}
 }
