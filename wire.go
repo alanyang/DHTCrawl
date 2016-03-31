@@ -3,7 +3,6 @@ package DHTCrawl
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"github.com/zeebo/bencode"
 	"log"
 	"math"
@@ -12,20 +11,13 @@ import (
 )
 
 const (
-	StepHandshake = iota
-	StepExtension
-	StepPiece
-	StepDone
-	StepOver
-)
-
-const (
-	BtProtocol    = "BitTorrent protocol"
-	PieceLength   = 16384
-	HandshakeID   = byte(0)
-	BtExtensionID = byte(20)
-
-	MaxMetaSize = 10000000
+	BtProtocol      = "BitTorrent protocol"
+	PieceLength     = 16384
+	MaxSize         = 16384 * 20
+	HandshakeID     = byte(0)
+	BtExtensionID   = byte(20)
+	HandshakeLength = 68
+	MaxMetaSize     = 10000000
 )
 
 var (
@@ -33,53 +25,161 @@ var (
 	BtReserved = []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x01}
 )
 
-type (
-	Client struct {
-		Addr *net.TCPAddr
-		Hash Hash
-	}
-	Wire struct {
-		Conn      net.Conn
-		Hash      Hash
-		chunk     []byte
-		step      int
-		umetadata int
-		size      int
-		metaChunk [][]byte
-		recvChunk int
-		Result    chan map[string]interface{}
-	}
-
-	Transport struct {
-		ClientChan chan *Client
-	}
-)
-
-func NewTransport() *Transport {
-	t := &Transport{ClientChan: make(chan *Client, 500)}
-	go t.forever()
-	return t
+type Wire struct {
+	chunk      []byte
+	conn       net.Conn
+	Hash       Hash
+	utmetadata int
+	metaChunk  [][]byte
+	recvChunk  int
 }
 
-func (t *Transport) forever() {
-	for {
-		cl := <-t.ClientChan
-		w, err := NewWire(cl.Hash, cl.Addr)
-		if err != nil {
-			continue
-		}
-		w.SendHandshake()
+func NewWire(hash Hash, addr *net.TCPAddr) *Wire {
+	wire := &Wire{
+		Hash: hash,
 	}
-}
-
-func NewWire(hash Hash, addr *net.TCPAddr) (*Wire, error) {
 	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*2)
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	wire := &Wire{Conn: conn, chunk: []byte{}, Hash: hash, Result: make(chan map[string]interface{})}
-	go wire.read()
-	return wire, nil
+	wire.conn = conn
+	go wire.handle()
+	return wire
+}
+
+func (w *Wire) handle() {
+	handshaked := false
+	buf := make([]byte, 2048)
+	for {
+		n, err := w.conn.Read(buf)
+		if err != nil {
+			// log.Println(err, w.conn.RemoteAddr().String())
+			return
+		}
+		w.chunk = append(w.chunk, buf[:n]...)
+
+		if handshaked {
+			for len(w.chunk) >= 4 {
+				var length uint32
+				binary.Read(bytes.NewBuffer(w.chunk[:4]), binary.BigEndian, &length)
+				log.Println(length)
+				if len(w.chunk) >= int(length)+4 {
+					w.handleExtended(w.chunk[4 : int(length)+4])
+					w.chunk = w.chunk[int(length)+4:]
+				} else {
+					break
+				}
+			}
+		} else {
+			if len(w.chunk) >= HandshakeLength {
+				w.handleHandshake(w.chunk[:68])
+				w.chunk = w.chunk[68:]
+				handshaked = true
+			}
+		}
+	}
+}
+
+func (w *Wire) Close() {
+	w.conn.Close()
+}
+
+func (w *Wire) handleHandshake(data []byte) {
+	plength := int(data[0])
+	protocol := data[1 : plength+1]
+	if string(protocol) != BtProtocol {
+		w.Close()
+		return
+	}
+	reserved := data[plength+1 : plength+1+8]
+	if reserved[5]&0x10 == 0 {
+		w.Close()
+		return
+	}
+	w.SendExtension()
+	log.Println("handshake response", w.conn.RemoteAddr().String())
+}
+
+func (w *Wire) handleExtended(data []byte) {
+	if data[0] == BtExtensionID {
+		if data[1] == byte(0) {
+			log.Println("extended response", w.conn.RemoteAddr().String())
+			extendedMeta := make(map[string]interface{})
+			err := bencode.DecodeBytes(data[2:], &extendedMeta)
+			if err != nil {
+				log.Println(err)
+				w.Close()
+				return
+			}
+			w.handleMetainfo(extendedMeta)
+		} else {
+			log.Println("piece response", w.conn.RemoteAddr().String())
+			w.handlePiece(data[2:])
+		}
+	}
+}
+
+func (w *Wire) handleMetainfo(ext map[string]interface{}) {
+	var num int
+	if size, ok := ext["metadata_size"].(int64); ok {
+		if m, ok := ext["m"].(map[string]interface{}); ok {
+			if meta, ok := m["ut_metadata"].(int64); ok {
+				w.utmetadata = int(meta)
+				num = int(math.Ceil(float64(size) / float64(PieceLength)))
+				w.metaChunk = [][]byte{}
+				for i := 0; i < num; i++ {
+					w.metaChunk = append(w.metaChunk, []byte{})
+				}
+
+				if w.utmetadata == 0 || size == 0 || size > MaxMetaSize {
+					w.Close()
+					return
+				}
+				for i := 0; i < num; i++ {
+					w.RequestPiece(i)
+				}
+			}
+		}
+	}
+}
+
+func (w *Wire) handlePiece(b []byte) {
+	bs := bytes.Split(b, []byte{101, 101})
+	msg := make(map[string]interface{})
+	err := bencode.DecodeBytes(append(bs[0], []byte{101, 101}...), &msg)
+	if err != nil {
+		w.Close()
+		return
+	}
+	if t, ok := msg["msg_type"].(int64); ok && t != int64(1) {
+		w.Close()
+		return
+	}
+	piece, ok := msg["piece"].(int64)
+	if !ok {
+		w.Close()
+		return
+	}
+
+	w.metaChunk[int(piece)] = bs[1]
+	w.recvChunk++
+	log.Println("recv piece done!", w.conn.RemoteAddr().String(), w.recvChunk, len(w.metaChunk))
+	if len(w.metaChunk) == w.recvChunk {
+		w.handleDone()
+	}
+}
+
+func (w *Wire) handleDone() {
+	b := bytes.Join(w.metaChunk, []byte{})
+	meta := map[string]interface{}{}
+	err := bencode.DecodeBytes(b, &meta)
+	if err != nil {
+		log.Printf("decode metadata %s", err.Error())
+		return
+	}
+	for k, _ := range meta {
+		log.Println(k)
+	}
 }
 
 func (w *Wire) SendHandshake() {
@@ -89,8 +189,7 @@ func (w *Wire) SendHandshake() {
 	data.Write(BtReserved)
 	data.WriteString(string(w.Hash))
 	data.Write([]byte(NewNodeID()))
-	w.Conn.Write(data.Bytes())
-	w.step = StepHandshake
+	w.conn.Write(data.Bytes())
 }
 
 func (w *Wire) SendExtension() {
@@ -105,14 +204,13 @@ func (w *Wire) SendExtension() {
 	binary.Write(data, binary.BigEndian, uint32(body.Len()))
 	data.Write(body.Bytes())
 
-	w.Conn.Write(data.Bytes())
-	w.step = StepExtension
+	w.conn.Write(data.Bytes())
 }
 
 func (w *Wire) RequestPiece(p int) {
 	body := bytes.NewBuffer([]byte{})
 	body.WriteByte(BtExtensionID)
-	body.WriteByte(byte(w.umetadata))
+	body.WriteByte(byte(w.utmetadata))
 
 	meta, _ := bencode.EncodeBytes(map[string]interface{}{"msg_type": 0, "piece": p})
 	body.Write(meta)
@@ -121,176 +219,5 @@ func (w *Wire) RequestPiece(p int) {
 	binary.Write(data, binary.BigEndian, uint32(body.Len()))
 	data.Write(body.Bytes())
 
-	w.Conn.Write(data.Bytes())
-	w.step = StepPiece
-}
-
-func (w *Wire) read() {
-	for {
-		buf := make([]byte, 4096)
-		n, err := w.Conn.Read(buf)
-		if err != nil {
-			//fail
-			// log.Println(err, "read error!!!")
-			break
-		}
-		// log.Println(string(buf[:n]), "Recv!!")
-		w.chunk = append(w.chunk, buf[:n]...)
-		w.parse()
-	}
-	w.Conn.Close()
-}
-
-func (w *Wire) parse() {
-	var err error
-	switch w.step {
-	case StepHandshake:
-		err = w.handleHandshake()
-	case StepExtension:
-		err = w.handleMessage()
-	case StepPiece:
-		err = w.handleMessage()
-	}
-	if err != nil {
-		log.Println(err.Error())
-		w.handleOver()
-		w.Conn.Close()
-	}
-}
-
-func (w *Wire) handleHandshake() error {
-	if len(w.chunk) < 68 {
-		return nil
-	}
-	r := bytes.NewReader(w.chunk[0:68])
-	r.ReadByte()
-	protocol := make([]byte, 19)
-	r.Read(protocol)
-	if string(protocol) != BtProtocol {
-		w.step = StepOver
-		return errors.New("Invalid protocol field")
-	}
-	reserved := make([]byte, 8)
-	r.Read(reserved)
-	if reserved[5]&0x10 == 0 {
-		w.step = StepOver
-		return errors.New("Peer choking")
-	}
-	w.chunk = []byte{}
-	w.SendExtension()
-	return nil
-}
-
-func (w *Wire) handleMessage() error {
-	if len(w.chunk) < 4 {
-		return nil
-	}
-	r := bytes.NewReader(w.chunk)
-	var length uint32
-	binary.Read(r, binary.BigEndian, &length)
-	if uint32(len(w.chunk)) < length+uint32(4) {
-		return nil
-	}
-	// log.Println(string(w.chunk[:pl-4]))
-	// log.Println(w.chunk[:20])
-	mid, _ := r.ReadByte()
-	if mid != BtExtensionID {
-		w.step = StepOver
-		return errors.New("Unknow protocol id")
-	}
-
-	ext, _ := r.ReadByte()
-	body := make([]byte, length-2)
-	r.Read(body)
-	w.chunk = w.chunk[length+4:]
-	if ext == byte(0) {
-		meta := make(map[string]interface{})
-		err := bencode.DecodeBytes(body, &meta)
-		if err != nil {
-			w.step = StepOver
-			return errors.New("Decode meta error")
-		}
-		w.handleExtension(meta)
-	} else {
-		log.Println("into piece handler")
-		w.handlePiece(body)
-	}
-	return nil
-}
-
-func (w *Wire) handleExtension(ext map[string]interface{}) {
-	var num int
-	if size, ok := ext["metadata_size"].(int64); ok {
-		if m, ok := ext["m"].(map[string]interface{}); ok {
-			if meta, ok := m["ut_metadata"].(int64); ok {
-				w.umetadata = int(meta)
-				w.size = int(size)
-				num = int(math.Ceil(float64(w.size) / float64(PieceLength)))
-				log.Println(w.size, PieceLength, num)
-				w.metaChunk = [][]byte{}
-				for i := 0; i < num; i++ {
-					w.metaChunk = append(w.metaChunk, []byte{})
-				}
-			}
-		}
-	}
-	if w.umetadata == 0 || w.size == 0 || w.size > MaxMetaSize {
-		w.step = StepOver
-		return
-	}
-	log.Println("recv extension done! request piece", w.Conn.RemoteAddr().String())
-	for i := 0; i < num; i++ {
-		w.RequestPiece(i)
-	}
-}
-
-func (w *Wire) handlePiece(b []byte) {
-	bs := bytes.Split(b, []byte{101, 101})
-	msg := make(map[string]interface{})
-	err := bencode.DecodeBytes(append(bs[0], []byte{101, 101}...), &msg)
-	if err != nil {
-		w.step = StepOver
-		return
-	}
-	if t, ok := msg["msg_type"].(int64); ok && t != int64(1) {
-		w.step = StepOver
-		return
-	}
-	piece, ok := msg["piece"].(int64)
-	if !ok {
-		w.step = StepOver
-		return
-	}
-
-	_, ok = msg["total_size"].(int64)
-	if !ok {
-		w.step = StepOver
-		return
-	}
-
-	w.metaChunk[int(piece)] = bs[1]
-	w.recvChunk++
-	log.Println("recv piece done!", w.Conn.RemoteAddr().String(), w.recvChunk, len(w.metaChunk))
-	if len(w.metaChunk) == w.recvChunk {
-		w.step = StepDone
-		w.handleDone()
-	}
-}
-
-func (w *Wire) handleDone() {
-	b := bytes.Join(w.metaChunk, []byte{})
-	meta := map[string]interface{}{}
-	err := bencode.DecodeBytes(b, &meta)
-	if err != nil {
-		log.Printf("decode metadata %s", err.Error())
-		w.step = StepOver
-		return
-	}
-	log.Println(meta["info"])
-	w.Result <- meta
-}
-
-func (w *Wire) handleOver() {
-	log.Println("over")
-	w.Result <- map[string]interface{}{}
+	w.conn.Write(data.Bytes())
 }
