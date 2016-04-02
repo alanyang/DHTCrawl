@@ -32,7 +32,8 @@ var (
 )
 
 type (
-	DataHandler func([]byte)
+	DataHandler  func([]byte)
+	EventHandler func(*Event)
 
 	File struct {
 		Path string `bencode:"path"`
@@ -69,13 +70,12 @@ type (
 		pieceLength  int
 		recvedPiece  int
 
-		output chan []byte
-		event  chan *Event
+		event EventHandler
+
+		Conn net.Conn
 	}
 
 	Wire struct {
-		Addr      *net.TCPAddr
-		Conn      net.Conn
 		Processor *Processor
 		Result    chan *MetadataResult
 	}
@@ -93,10 +93,27 @@ func NewWire() *Wire {
 	wire := new(Wire)
 	wire.Result = make(chan *MetadataResult)
 	wire.Processor = &Processor{
-		output: make(chan []byte),
-		Data:   [][]byte{},
+		Data:  [][]byte{},
+		event: wire.handleEvent,
 	}
 	return wire
+}
+
+func (w *Wire) handleEvent(event *Event) {
+	switch event.Type {
+	case EventError:
+		fmt.Println(event.Reason)
+		w.Result <- NewError(event.Reason)
+		return
+	case EventDone:
+		w.Result <- event.Result
+	case EventHandshake:
+		fmt.Println("Handshake success")
+	case EventExtended:
+		fmt.Println("Extended success")
+	case EventPiece:
+		fmt.Println("piece success")
+	}
 }
 
 func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
@@ -105,42 +122,16 @@ func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
 		w.Result <- NewError(err.Error())
 		return
 	}
-	w.Conn = conn
-	go w.Pipe()
+	w.Processor.Conn = conn
 	w.Processor.Start(hash)
 	buf := make([]byte, 512)
 	for {
-		n, err := w.Conn.Read(buf)
+		n, err := conn.Read(buf)
 		if err != nil {
 			w.Result <- NewError(err.Error())
 			break
 		}
 		w.Processor.Write(buf[:n])
-	}
-}
-
-func (w *Wire) Pipe() {
-	for {
-		select {
-		case data := <-w.Processor.output:
-			w.Conn.Write(data)
-		case event := <-w.Processor.event:
-			switch event.Type {
-			case EventError:
-				fmt.Println(event.Reason)
-				w.Result <- NewError(event.Reason)
-				w.Conn.Close()
-				return
-			case EventDone:
-				w.Result <- event.Result
-			case EventHandshake:
-				fmt.Println("Handshake success")
-			case EventExtended:
-				fmt.Println("Extended success")
-			case EventPiece:
-				fmt.Println("piece success")
-			}
-		}
 	}
 }
 
@@ -162,7 +153,7 @@ func (p *Processor) Write(data []byte) (int, error) {
 
 func (p *Processor) Start(hash Hash) {
 	p.Hash = hash
-	p.output <- p.packetHandshakeData()
+	p.Conn.Write(p.packetHandshakeData())
 	p.handleHandshake()
 }
 
@@ -172,8 +163,8 @@ func (p *Processor) process(size int, handler DataHandler) {
 }
 
 func (p *Processor) End(reason string) {
-	p.event <- NewErrorEvent(reason)
-	close(p.event)
+	p.event(NewErrorEvent(reason))
+	p.Conn.Close()
 }
 
 func (p *Processor) handleHandshake() {
@@ -190,9 +181,9 @@ func (p *Processor) handleHandshake() {
 				p.End("peer reject")
 				return
 			}
-			p.event <- &Event{Type: EventHandshake}
+			p.event(&Event{Type: EventHandshake})
 			p.process(4, p.handleHead)
-			p.output <- p.packetExtendedData()
+			p.Conn.Write(p.packetExtendedData())
 		})
 	})
 }
@@ -207,7 +198,7 @@ func (p *Processor) handleHead(data []byte) {
 
 func (p *Processor) handleBody(data []byte) {
 	p.process(4, p.handleHead)
-	if data[0] == BtExtendedID {
+	if data[0] == BtMessageID {
 		p.handleExtended(data[1], data[2:])
 	}
 }
@@ -227,20 +218,22 @@ func (p *Processor) handleExtended(ext byte, data []byte) {
 }
 
 func (p *Processor) handleExtHandshake(ext map[string]interface{}) {
-	p.event <- &Event{Type: EventExtended}
+	p.event(&Event{Type: EventExtended})
 	if size, ok := ext["metadata_size"].(int64); ok {
 		if m, ok := ext["m"].(map[string]interface{}); ok {
 			if meta, ok := m["ut_metadata"].(int64); ok {
 				p.utmetadata = int(meta)
-				p.pieceLength = int(math.Ceil(float64(size) / float64(PieceSize)))
-				p.metadata = make([][]byte, p.pieceLength)
 
 				if p.utmetadata == 0 || size == 0 || size > MaxMetadataSize {
 					p.End(fmt.Sprintf("extended invalid metadata_size:%d, ut_metadata:%d", size, p.utmetadata))
 					return
 				}
+
+				p.pieceLength = int(math.Ceil(float64(size) / float64(PieceSize)))
+				p.metadata = make([][]byte, p.pieceLength)
 				for i := 0; i < p.pieceLength; i++ {
-					p.output <- p.packetPieceRequestData(i)
+					fmt.Println("request pieces")
+					p.Conn.Write(p.packetPieceRequestData(i))
 				}
 			}
 		}
@@ -248,7 +241,7 @@ func (p *Processor) handleExtHandshake(ext map[string]interface{}) {
 }
 
 func (p *Processor) handlePiece(data []byte) {
-	p.event <- &Event{Type: EventPiece}
+	p.event(&Event{Type: EventPiece})
 	i := bytes.Index(data, []byte{101, 101})
 	if i == -1 {
 		p.End("invalid piece info dict")
@@ -290,8 +283,8 @@ func (p *Processor) handleDone() {
 		return
 	}
 	result.Hash = p.Hash
-	p.event <- &Event{Type: EventDone, Result: result}
-	close(p.event)
+	p.event(&Event{Type: EventDone, Result: result})
+	p.Conn.Close()
 }
 
 func (p *Processor) packetHandshakeData() []byte {
