@@ -102,7 +102,6 @@ func NewWire() *Wire {
 func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
 	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*2)
 	if err != nil {
-		fmt.Printf("%s , %s\n", err.Error(), addr.String())
 		w.Result <- NewError(err.Error())
 		return
 	}
@@ -125,15 +124,13 @@ func (w *Wire) Pipe() {
 		select {
 		case data := <-w.Processor.output:
 			w.Conn.Write(data)
-		case event, ok := <-w.Processor.event:
-			if !ok {
-				w.Conn.Close()
-				break
-			}
+		case event := <-w.Processor.event:
 			switch event.Type {
 			case EventError:
 				fmt.Println(event.Reason)
 				w.Result <- NewError(event.Reason)
+				w.Conn.Close()
+				return
 			case EventDone:
 				w.Result <- event.Result
 			case EventHandshake:
