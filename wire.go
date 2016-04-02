@@ -2,10 +2,12 @@ package DHTCrawl
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/zeebo/bencode"
+	"io"
 	"math"
 	"net"
 	"strings"
@@ -18,7 +20,7 @@ const (
 	BtMessageID  = byte(20)
 
 	PieceSize       = 1 << 14
-	MaxMetadataSize = 1 << 20
+	MaxMetadataSize = (1 << 20) * 10
 
 	EventError = iota - 1
 	EventHandshake
@@ -247,7 +249,7 @@ func (p *Processor) handleExtHandshake(ext map[string]interface{}) {
 			if meta, ok := m["ut_metadata"].(int64); ok {
 				p.utmetadata = int(meta)
 
-				if p.utmetadata == 0 || size == 0 || size > MaxMetadataSize {
+				if p.utmetadata == 0 || size <= 0 || size > MaxMetadataSize {
 					p.End(fmt.Sprintf("extended invalid metadata_size:%d, ut_metadata:%d", size, p.utmetadata))
 					return
 				}
@@ -304,6 +306,9 @@ func (p *Processor) handleDone() {
 		p.End(fmt.Sprintf("Decode metadata error %s", err.Error()))
 		return
 	}
+	s := sha1.New()
+	io.WriteString(s, string(data))
+	fmt.Println(fmt.Sprintf("%X", s.Sum(nil)), p.Hash.Hex())
 	result.Hash = p.Hash
 	p.event(&Event{Type: EventDone, Result: result})
 	p.Conn.Close()
