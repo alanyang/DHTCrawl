@@ -3,21 +3,27 @@ package DHTCrawl
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"github.com/zeebo/bencode"
-	"log"
 	"math"
 	"net"
 	"time"
 )
 
 const (
-	BtProtocol      = "BitTorrent protocol"
-	PieceLength     = 16384
-	MaxSize         = 16384 * 20
-	HandshakeID     = byte(0)
-	BtExtensionID   = byte(20)
-	HandshakeLength = 68
-	MaxMetaSize     = 10000000
+	BtProtocol   = "\x13BitTorrent protocol"
+	BtExtendedID = byte(0)
+	BtMessageID  = byte(20)
+
+	PieceSize       = 1 << 14
+	MaxMetadataSize = 1 << 20
+
+	EventError = iota - 1
+	EventHandshake
+	EventExtended
+	EventPiece
+	EventDone
 )
 
 var (
@@ -25,177 +31,285 @@ var (
 	BtReserved = []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x01}
 )
 
-type Wire struct {
-	chunk      []byte
-	conn       net.Conn
-	Hash       Hash
-	utmetadata int
-	metaChunk  [][]byte
-	recvChunk  int
+type (
+	DataHandler func([]byte)
+
+	File struct {
+		Path string `bencode:"path"`
+		Size int64  `bencode:"length"`
+	}
+
+	MetadataResult struct {
+		Error  error
+		Hash   Hash
+		Name   string      `bencode:"name"`
+		Size   int64       `bencode:"length"`
+		Files  []*File     `bencode:"files"`
+		Pieces interface{} `bencode:"pieces"`
+	}
+
+	Event struct {
+		Type   int
+		Reason string
+		Result *MetadataResult
+	}
+
+	Processor struct {
+		Hash Hash
+
+		Data [][]byte
+		Size int
+
+		Handler     DataHandler
+		HandlerSize int
+
+		utmetadata   int
+		metadata     [][]byte
+		metadataSize int
+		pieceLength  int
+		recvedPiece  int
+
+		output chan []byte
+		event  chan *Event
+	}
+
+	Wire struct {
+		Addr      *net.TCPAddr
+		Conn      net.Conn
+		Processor *Processor
+		Result    chan *MetadataResult
+	}
+)
+
+func NewError(reason string) *MetadataResult {
+	return &MetadataResult{Error: errors.New(reason)}
 }
 
-func NewWire(hash Hash, addr *net.TCPAddr) *Wire {
-	wire := &Wire{
-		Hash: hash,
+func NewErrorEvent(reason string) *Event {
+	return &Event{Type: EventError, Reason: reason}
+}
+
+func NewWire() *Wire {
+	wire := new(Wire)
+	wire.Result = make(chan *MetadataResult)
+	wire.Processor = &Processor{
+		output: make(chan []byte),
 	}
-	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*2)
-	if err != nil {
-		return nil
-	}
-	wire.conn = conn
-	go wire.handle()
 	return wire
 }
 
-func (w *Wire) handle() {
-	handshaked := false
-	buf := make([]byte, 2048)
+func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
+	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*2)
+	if err != nil {
+		fmt.Println("timeout")
+		w.Result <- NewError(err.Error())
+		return
+	}
+	w.Conn = conn
+	go w.Pipe()
+	w.Processor.Start(hash)
+	buf := make([]byte, 512)
 	for {
-		n, err := w.conn.Read(buf)
+		n, err := w.Conn.Read(buf)
 		if err != nil {
-			// log.Println(err, w.conn.RemoteAddr().String())
-			return
+			w.Result <- NewError(err.Error())
+			break
 		}
-		w.chunk = append(w.chunk, buf[:n]...)
+		w.Processor.Write(buf[:n])
+	}
+}
 
-		if handshaked {
-			for len(w.chunk) >= 4 {
-				var length uint32
-				binary.Read(bytes.NewBuffer(w.chunk[:4]), binary.BigEndian, &length)
-				log.Println(length)
-				if len(w.chunk) >= int(length)+4 {
-					w.handleExtended(w.chunk[4 : int(length)+4])
-					w.chunk = w.chunk[int(length)+4:]
-				} else {
-					break
-				}
+func (w *Wire) Pipe() {
+	for {
+		select {
+		case data := <-w.Processor.output:
+			w.Conn.Write(data)
+		case event, ok := <-w.Processor.event:
+			if !ok {
+				w.Conn.Close()
+				break
 			}
+			switch event.Type {
+			case EventError:
+				fmt.Println(event.Reason)
+				w.Result <- NewError(event.Reason)
+			case EventDone:
+				w.Result <- event.Result
+			case EventHandshake:
+				fmt.Println("Handshake success")
+			case EventExtended:
+				fmt.Println("Extended success")
+			case EventPiece:
+				fmt.Println("piece success")
+			}
+		}
+	}
+}
+
+func (p *Processor) Write(data []byte) (int, error) {
+	p.Size += len(data)
+	p.Data = append(p.Data, data)
+	for p.Size >= p.HandlerSize {
+		buf := bytes.Join(p.Data, []byte{})
+		p.Size -= p.HandlerSize
+		if p.Size == 0 {
+			p.Data = [][]byte{}
 		} else {
-			if len(w.chunk) >= HandshakeLength {
-				w.handleHandshake(w.chunk[:68])
-				w.chunk = w.chunk[68:]
-				handshaked = true
-			}
+			p.Data = [][]byte{buf[p.HandlerSize:]}
 		}
+		p.Handler(buf[:p.HandlerSize])
 	}
+	return len(data), nil
 }
 
-func (w *Wire) Close() {
-	w.conn.Close()
+func (p *Processor) Start(hash Hash) {
+	p.Hash = hash
+	p.output <- p.packetHandshakeData()
+	p.handleHandshake()
 }
 
-func (w *Wire) handleHandshake(data []byte) {
-	plength := int(data[0])
-	protocol := data[1 : plength+1]
-	if string(protocol) != BtProtocol {
-		w.Close()
-		return
-	}
-	reserved := data[plength+1 : plength+1+8]
-	if reserved[5]&0x10 == 0 {
-		w.Close()
-		return
-	}
-	w.SendExtension()
-	log.Println("handshake response", w.conn.RemoteAddr().String())
+func (p *Processor) process(size int, handler DataHandler) {
+	p.HandlerSize = size
+	p.Handler = handler
 }
 
-func (w *Wire) handleExtended(data []byte) {
-	if data[0] == BtExtensionID {
-		if data[1] == byte(0) {
-			log.Println("extended response", w.conn.RemoteAddr().String())
-			extendedMeta := make(map[string]interface{})
-			err := bencode.DecodeBytes(data[2:], &extendedMeta)
-			if err != nil {
-				log.Println(err)
-				w.Close()
+func (p *Processor) End(reason string) {
+	p.event <- NewErrorEvent(reason)
+	close(p.event)
+}
+
+func (p *Processor) handleHandshake() {
+	p.process(1, func(data []byte) {
+		length := int(data[0])
+		p.process(length+48, func(data []byte) {
+			protocol := data[:length]
+			if string(protocol) != BtProtocol {
+				p.End("this is not BitTorrent protocol")
 				return
 			}
-			w.handleMetainfo(extendedMeta)
-		} else {
-			log.Println("piece response", w.conn.RemoteAddr().String())
-			w.handlePiece(data[2:])
-		}
+			reserved := data[length:]
+			if reserved[5]&0x10 == 0 {
+				p.End("peer reject")
+				return
+			}
+			p.event <- &Event{Type: EventHandshake}
+			p.process(4, p.handleHead)
+			p.output <- p.packetExtendedData()
+		})
+	})
+}
+
+func (p *Processor) handleHead(data []byte) {
+	var length uint32
+	binary.Read(bytes.NewReader(data), binary.BigEndian, &length)
+	if int(length) > 0 {
+		p.process(int(length), p.handleBody)
 	}
 }
 
-func (w *Wire) handleMetainfo(ext map[string]interface{}) {
-	var num int
+func (p *Processor) handleBody(data []byte) {
+	p.process(4, p.handleHead)
+	if data[0] == BtExtendedID {
+		p.handleExtended(data[1], data[2:])
+	}
+}
+
+func (p *Processor) handleExtended(ext byte, data []byte) {
+	if ext == byte(0) {
+		val := make(map[string]interface{})
+		err := bencode.DecodeBytes(data, &val)
+		if err != nil {
+			p.End(fmt.Sprintf("decode extended meta info error %s", err.Error()))
+			return
+		}
+		p.handleExtHandshake(val)
+	} else {
+		p.handlePiece(data)
+	}
+}
+
+func (p *Processor) handleExtHandshake(ext map[string]interface{}) {
+	p.event <- &Event{Type: EventExtended}
 	if size, ok := ext["metadata_size"].(int64); ok {
 		if m, ok := ext["m"].(map[string]interface{}); ok {
 			if meta, ok := m["ut_metadata"].(int64); ok {
-				w.utmetadata = int(meta)
-				num = int(math.Ceil(float64(size) / float64(PieceLength)))
-				w.metaChunk = [][]byte{}
-				for i := 0; i < num; i++ {
-					w.metaChunk = append(w.metaChunk, []byte{})
-				}
+				p.utmetadata = int(meta)
+				p.pieceLength = int(math.Ceil(float64(size) / float64(PieceSize)))
+				p.metadata = make([][]byte, p.pieceLength)
 
-				if w.utmetadata == 0 || size == 0 || size > MaxMetaSize {
-					w.Close()
+				if p.utmetadata == 0 || size == 0 || size > MaxMetadataSize {
+					p.End(fmt.Sprintf("extended invalid metadata_size:%d, ut_metadata:%d", size, p.utmetadata))
 					return
 				}
-				for i := 0; i < num; i++ {
-					w.RequestPiece(i)
+				for i := 0; i < p.pieceLength; i++ {
+					p.output <- p.packetPieceRequestData(i)
 				}
 			}
 		}
 	}
 }
 
-func (w *Wire) handlePiece(b []byte) {
-	bs := bytes.Split(b, []byte{101, 101})
-	msg := make(map[string]interface{})
-	err := bencode.DecodeBytes(append(bs[0], []byte{101, 101}...), &msg)
+func (p *Processor) handlePiece(data []byte) {
+	p.event <- &Event{Type: EventPiece}
+	i := bytes.Index(data, []byte{101, 101})
+	if i == -1 {
+		p.End("invalid piece info dict")
+		return
+	}
+	info := make(map[string]interface{})
+	err := bencode.DecodeBytes(data[0:i+2], &info)
 	if err != nil {
-		w.Close()
+		p.End(fmt.Sprintf("decode piece dict error, %s", err.Error()))
 		return
 	}
-	if t, ok := msg["msg_type"].(int64); ok && t != int64(1) {
-		w.Close()
+	piece := data[i+2:]
+
+	if t, ok := info["msg_type"].(int64); !ok || t != int64(1) {
+		p.End(fmt.Sprintf("invalid msg_type: %d", t))
 		return
 	}
-	piece, ok := msg["piece"].(int64)
+
+	n, ok := info["piece"].(int64)
 	if !ok {
-		w.Close()
+		p.End("invalid piece")
 		return
 	}
 
-	w.metaChunk[int(piece)] = bs[1]
-	w.recvChunk++
-	log.Println("recv piece done!", w.conn.RemoteAddr().String(), w.recvChunk, len(w.metaChunk))
-	if len(w.metaChunk) == w.recvChunk {
-		w.handleDone()
+	p.metadata[int(n)] = piece
+	p.recvedPiece++
+	if p.recvedPiece == p.pieceLength {
+		p.handleDone()
 	}
 }
 
-func (w *Wire) handleDone() {
-	b := bytes.Join(w.metaChunk, []byte{})
-	meta := map[string]interface{}{}
-	err := bencode.DecodeBytes(b, &meta)
+func (p *Processor) handleDone() {
+	data := bytes.Join(p.metadata, []byte{})
+	result := new(MetadataResult)
+	decoder := bencode.NewDecoder(bytes.NewReader(data))
+	err := decoder.Decode(&result)
 	if err != nil {
-		log.Printf("decode metadata %s", err.Error())
+		p.End(fmt.Sprintf("Decode metadata error %s", err.Error()))
 		return
 	}
-	for k, _ := range meta {
-		log.Println(k)
-	}
+	result.Hash = p.Hash
+	p.event <- &Event{Type: EventDone, Result: result}
+	close(p.event)
 }
 
-func (w *Wire) SendHandshake() {
+func (p *Processor) packetHandshakeData() []byte {
 	data := bytes.NewBuffer([]byte{})
-	data.WriteByte(byte(len(BtProtocol)))
+	// data.WriteByte(byte(0x13))
 	data.WriteString(BtProtocol)
 	data.Write(BtReserved)
-	data.WriteString(string(w.Hash))
+	data.WriteString(string(p.Hash))
 	data.Write([]byte(NewNodeID()))
-	w.conn.Write(data.Bytes())
+	return data.Bytes()
 }
 
-func (w *Wire) SendExtension() {
+func (p *Processor) packetExtendedData() []byte {
 	body := bytes.NewBuffer([]byte{})
-	body.WriteByte(BtExtensionID)
-	body.WriteByte(HandshakeID)
+	body.WriteByte(BtMessageID)
+	body.WriteByte(BtExtendedID)
 
 	meta, _ := bencode.EncodeBytes(map[string]interface{}{"m": map[string]interface{}{"ut_metadata": 1}})
 	body.Write(meta)
@@ -204,13 +318,13 @@ func (w *Wire) SendExtension() {
 	binary.Write(data, binary.BigEndian, uint32(body.Len()))
 	data.Write(body.Bytes())
 
-	w.conn.Write(data.Bytes())
+	return data.Bytes()
 }
 
-func (w *Wire) RequestPiece(p int) {
+func (p *Processor) packetPieceRequestData(i int) []byte {
 	body := bytes.NewBuffer([]byte{})
-	body.WriteByte(BtExtensionID)
-	body.WriteByte(byte(w.utmetadata))
+	body.WriteByte(BtMessageID)
+	body.WriteByte(byte(p.utmetadata))
 
 	meta, _ := bencode.EncodeBytes(map[string]interface{}{"msg_type": 0, "piece": p})
 	body.Write(meta)
@@ -219,5 +333,5 @@ func (w *Wire) RequestPiece(p int) {
 	binary.Write(data, binary.BigEndian, uint32(body.Len()))
 	data.Write(body.Bytes())
 
-	w.conn.Write(data.Bytes())
+	return data.Bytes()
 }
