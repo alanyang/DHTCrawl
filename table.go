@@ -65,12 +65,15 @@ func (n NodeID) Hex() string {
 }
 
 func (n NodeID) Neighbor() NodeID {
-	return append(n[:12], NewNodeID()[:8]...)
+	return append(n[:10], NewNodeID()[10:]...)
 }
 
 func (h Hash) Hex() string {
-
 	return fmt.Sprintf("%X", []byte(h))
+}
+
+func (h Hash) Magnet() string {
+	return fmt.Sprintf("magnet:?xt=urn:btih:%X", []byte(h))
 }
 
 func NewNode() *Node {

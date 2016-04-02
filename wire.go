@@ -2,12 +2,10 @@ package DHTCrawl
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/zeebo/bencode"
-	"io"
 	"math"
 	"net"
 	"strings"
@@ -48,16 +46,17 @@ type (
 	MetadataResult struct {
 		Error         error
 		Hash          Hash
-		Length        int64       `bencode:"length"`
-		Name          string      `bencode:"name"`
-		UName         string      `bencode:"name.utf-8"`
-		PieceLength   int64       `bencode:"piece length"`
-		Pieces        interface{} `bencode:"pieces"`
-		Publisher     string      `bencode:"publisher"`
-		UPublisher    string      `bencode:"publisher.utf-8"`
-		PublisherUrl  string      `bencode:"publisher-url"`
-		UPublisherUrl string      `bencode:"publisher-url.utf-8"`
-		Files         []*File     `bencode:"files"`
+		Length        int64                  `bencode:"length"`
+		Name          string                 `bencode:"name"`
+		UName         string                 `bencode:"name.utf-8"`
+		PieceLength   int64                  `bencode:"piece length"`
+		Pieces        interface{}            `bencode:"pieces"`
+		Publisher     string                 `bencode:"publisher"`
+		UPublisher    string                 `bencode:"publisher.utf-8"`
+		PublisherUrl  string                 `bencode:"publisher-url"`
+		UPublisherUrl string                 `bencode:"publisher-url.utf-8"`
+		Files         []*File                `bencode:"files"`
+		MetaInfo      map[string]interface{} `bencode:"info"`
 	}
 
 	Event struct {
@@ -79,7 +78,6 @@ type (
 		metadata     [][]byte
 		metadataSize int
 		pieceLength  int
-		recvedPiece  int
 
 		event EventHandler
 
@@ -113,12 +111,13 @@ func NewWire() *Wire {
 func (w *Wire) handleEvent(event *Event) {
 	switch event.Type {
 	case EventError:
-		fmt.Println(event.Reason)
+		// fmt.Println(event.Reason)
 		w.Result <- NewError(event.Reason)
 		return
 	case EventDone:
 		fmt.Println("********************************")
 		fmt.Println(event.Result.Hash.Hex())
+		fmt.Println(event.Result.Hash.Magnet())
 		fmt.Println(event.Result.Name)
 		if event.Result.Length != 0 {
 			fmt.Println(event.Result.Length)
@@ -254,9 +253,9 @@ func (p *Processor) handleExtHandshake(ext map[string]interface{}) {
 					return
 				}
 
-				p.pieceLength = int(math.Ceil(float64(size) / float64(PieceSize)))
-				p.metadata = make([][]byte, p.pieceLength)
-				for i := 0; i < p.pieceLength; i++ {
+				pieceLength := int(math.Ceil(float64(size) / float64(PieceSize)))
+				p.metadata = make([][]byte, pieceLength)
+				for i := 0; i < pieceLength; i++ {
 					p.Conn.Write(p.packetPieceRequestData(i))
 				}
 			}
@@ -266,18 +265,18 @@ func (p *Processor) handleExtHandshake(ext map[string]interface{}) {
 
 func (p *Processor) handlePiece(data []byte) {
 	p.event(&Event{Type: EventPiece})
-	i := bytes.Index(data, []byte{101, 101})
-	if i == -1 {
+	i := bytes.Index(data, []byte{101, 101}) + 2
+	if i == 1 {
 		p.End("invalid piece info dict")
 		return
 	}
 	info := make(map[string]interface{})
-	err := bencode.DecodeBytes(data[0:i+2], &info)
+	err := bencode.DecodeBytes(data[0:i], &info)
 	if err != nil {
 		p.End(fmt.Sprintf("decode piece dict error, %s", err.Error()))
 		return
 	}
-	piece := data[i+2:]
+	piece := data[i:]
 
 	if t, ok := info["msg_type"].(int64); !ok || t != int64(1) {
 		p.End(fmt.Sprintf("invalid msg_type: %d", t))
@@ -291,10 +290,18 @@ func (p *Processor) handlePiece(data []byte) {
 	}
 
 	p.metadata[int(n)] = piece
-	p.recvedPiece++
-	if p.recvedPiece == p.pieceLength {
+	if p.isDone() {
 		p.handleDone()
 	}
+}
+
+func (p *Processor) isDone() (b bool) {
+	for _, piece := range p.metadata {
+		if len(piece) == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *Processor) handleDone() {
@@ -306,9 +313,9 @@ func (p *Processor) handleDone() {
 		p.End(fmt.Sprintf("Decode metadata error %s", err.Error()))
 		return
 	}
-	s := sha1.New()
-	io.WriteString(s, string(data))
-	fmt.Println(fmt.Sprintf("%X", s.Sum(nil)), p.Hash.Hex())
+	//check sha1 sum equal hash?
+	// s := sha1.Sum(data)
+	// fmt.Println(s, []byte(p.Hash))
 	result.Hash = p.Hash
 	p.event(&Event{Type: EventDone, Result: result})
 	p.Conn.Close()
