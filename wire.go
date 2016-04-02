@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	BtProtocol   = "\x13BitTorrent protocol"
+	BtProtocol   = "BitTorrent protocol"
 	BtExtendedID = byte(0)
 	BtMessageID  = byte(20)
 
@@ -94,6 +94,7 @@ func NewWire() *Wire {
 	wire.Result = make(chan *MetadataResult)
 	wire.Processor = &Processor{
 		output: make(chan []byte),
+		Data:   [][]byte{},
 	}
 	return wire
 }
@@ -101,7 +102,7 @@ func NewWire() *Wire {
 func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
 	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*2)
 	if err != nil {
-		fmt.Println("timeout")
+		fmt.Printf("%s , %s\n", err.Error(), addr.String())
 		w.Result <- NewError(err.Error())
 		return
 	}
@@ -298,7 +299,7 @@ func (p *Processor) handleDone() {
 
 func (p *Processor) packetHandshakeData() []byte {
 	data := bytes.NewBuffer([]byte{})
-	// data.WriteByte(byte(0x13))
+	data.WriteByte(byte(0x13))
 	data.WriteString(BtProtocol)
 	data.Write(BtReserved)
 	data.WriteString(string(p.Hash))
