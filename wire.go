@@ -8,6 +8,7 @@ import (
 	"github.com/zeebo/bencode"
 	"math"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -36,17 +37,25 @@ type (
 	EventHandler func(*Event)
 
 	File struct {
-		Path string `bencode:"path"`
-		Size int64  `bencode:"length"`
+		Path   []string `bencode:"path"`
+		UPath  []string `bencode:"path.utf-8"`
+		Length int64    `bencode:"length"`
+		Md5sum string   `bencode:"md5sum"`
 	}
 
 	MetadataResult struct {
-		Error  error
-		Hash   Hash
-		Name   string      `bencode:"name"`
-		Size   int64       `bencode:"length"`
-		Files  []*File     `bencode:"files"`
-		Pieces interface{} `bencode:"pieces"`
+		Error         error
+		Hash          Hash
+		Length        int64       `bencode:"length"`
+		Name          string      `bencode:"name"`
+		UName         string      `bencode:"name.utf-8"`
+		PieceLength   int64       `bencode:"piece length"`
+		Pieces        interface{} `bencode:"pieces"`
+		Publisher     string      `bencode:"publisher"`
+		UPublisher    string      `bencode:"publisher.utf-8"`
+		PublisherUrl  string      `bencode:"publisher-url"`
+		UPublisherUrl string      `bencode:"publisher-url.utf-8"`
+		Files         []*File     `bencode:"files"`
 	}
 
 	Event struct {
@@ -106,13 +115,27 @@ func (w *Wire) handleEvent(event *Event) {
 		w.Result <- NewError(event.Reason)
 		return
 	case EventDone:
+		fmt.Println("********************************")
+		fmt.Println(event.Result.Hash.Hex())
+		fmt.Println(event.Result.Name)
+		if event.Result.Length != 0 {
+			fmt.Println(event.Result.Length)
+		}
+		if len(event.Result.Files) != 0 {
+			fmt.Println("========FILES==========")
+			for _, f := range event.Result.Files {
+				fmt.Printf("\t%s (%d)\n", strings.Join(f.Path, "/"), f.Length)
+			}
+			fmt.Println("=======================")
+		}
+		fmt.Println("********************************\n")
 		w.Result <- event.Result
 	case EventHandshake:
-		fmt.Println("Handshake success")
+		// fmt.Println("Handshake success")
 	case EventExtended:
-		fmt.Println("Extended success")
+		// fmt.Println("Extended success")
 	case EventPiece:
-		fmt.Println("piece success")
+		// fmt.Println("piece success")
 	}
 }
 
@@ -232,7 +255,6 @@ func (p *Processor) handleExtHandshake(ext map[string]interface{}) {
 				p.pieceLength = int(math.Ceil(float64(size) / float64(PieceSize)))
 				p.metadata = make([][]byte, p.pieceLength)
 				for i := 0; i < p.pieceLength; i++ {
-					fmt.Println("request pieces")
 					p.Conn.Write(p.packetPieceRequestData(i))
 				}
 			}
@@ -317,7 +339,7 @@ func (p *Processor) packetPieceRequestData(i int) []byte {
 	body.WriteByte(BtMessageID)
 	body.WriteByte(byte(p.utmetadata))
 
-	meta, _ := bencode.EncodeBytes(map[string]interface{}{"msg_type": 0, "piece": p})
+	meta, _ := bencode.EncodeBytes(map[string]interface{}{"msg_type": 0, "piece": i})
 	body.Write(meta)
 
 	data := bytes.NewBuffer([]byte{})
