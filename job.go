@@ -119,7 +119,7 @@ func (j *WireJob) handleResult(r *MetadataResult) {
 func (j *WireJob) addJob(job *Job) {
 	if !j.started.Has(job.Hash) {
 		for _, w := range j.worker {
-			if w.Idle {
+			if w.IsIdle() {
 				j.started.Set(job.Hash)
 				w.Job <- job
 				break

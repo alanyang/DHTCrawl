@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/zeebo/bencode"
 	"net/http"
+	"time"
 )
 
 const (
@@ -23,7 +24,9 @@ func HttpDownload(hash Hash) (*MetadataResult, error) {
 		return nil, err
 	}
 	req.Header.Set("Referer", Url)
-	client := new(http.Client)
+	client := http.Client{
+		Timeout: time.Duration(time.Second * 2),
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

@@ -11,6 +11,7 @@ import (
 
 func main() {
 	dht := crawl.NewDHT(nil)
+	num := 0
 	dht.HandleHash(func(hash crawl.Hash) bool {
 		key := []byte(hash)
 		_, err := dht.DB.Get(key, nil)
@@ -26,6 +27,8 @@ func main() {
 		return false
 	})
 	dht.HandleMetadata(func(info *crawl.MetadataResult) {
+		num++
+		log.Println(num)
 		fmt.Println("********************************")
 		fmt.Println(info.Hash.Hex())
 		fmt.Println(info.Hash.Magnet())
