@@ -162,11 +162,11 @@ func (w *Wire) handleEvent(event *Event) {
 
 func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
 	defer w.Release()
-	result, err := HttpDownload(hash)
-	if err == nil {
-		w.Handler(result)
-		return
-	}
+	// result, err := HttpDownload(hash)
+	// if err == nil {
+	// 	w.Handler(result)
+	// 	return
+	// }
 	w.download(hash, addr)
 }
 
