@@ -3,12 +3,10 @@ package DHTCrawl
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"github.com/zeebo/bencode"
 	"math"
 	"net"
-	"strings"
 	"time"
 )
 
@@ -18,7 +16,7 @@ const (
 	BtMessageID  = byte(20)
 
 	PieceSize       = 1 << 14
-	MaxMetadataSize = (1 << 20) * 10
+	MaxMetadataSize = (1 << 20) * 15
 
 	EventError = iota - 1
 	EventHandshake
@@ -33,8 +31,9 @@ var (
 )
 
 type (
-	DataHandler  func([]byte)
-	EventHandler func(*Event)
+	DataHandler   func([]byte)
+	EventHandler  func(*Event)
+	ResultHandler func(*MetadataResult)
 
 	File struct {
 		Path   []string `bencode:"path"`
@@ -44,7 +43,6 @@ type (
 	}
 
 	MetadataResult struct {
-		Error         error
 		Hash          Hash
 		Length        int64                  `bencode:"length"`
 		Name          string                 `bencode:"name"`
@@ -61,6 +59,7 @@ type (
 
 	Event struct {
 		Type   int
+		Hash   Hash
 		Reason string
 		Result *MetadataResult
 	}
@@ -86,51 +85,50 @@ type (
 
 	Wire struct {
 		Processor *Processor
-		Result    chan *MetadataResult
+		Handler   ResultHandler
+		Idle      bool
+		Job       chan *Job
 	}
 )
 
-func NewError(reason string) *MetadataResult {
-	return &MetadataResult{Error: errors.New(reason)}
+func NewErrorResult(hash Hash) *MetadataResult {
+	return &MetadataResult{Hash: hash}
 }
 
-func NewErrorEvent(reason string) *Event {
-	return &Event{Type: EventError, Reason: reason}
+func NewErrorEvent(reason string, hash Hash) *Event {
+	return &Event{Type: EventError, Reason: reason, Hash: hash}
 }
 
-func NewWire() *Wire {
+func NewWire(h ResultHandler) *Wire {
 	wire := new(Wire)
-	wire.Result = make(chan *MetadataResult)
+	wire.Handler = h
+	wire.Idle = true
+	wire.Job = make(chan *Job)
 	wire.Processor = &Processor{
 		Data:  [][]byte{},
 		event: wire.handleEvent,
 	}
+	go wire.wait()
 	return wire
+}
+
+func (w *Wire) wait() {
+	for {
+		job := <-w.Job
+		w.Idle = false
+		w.Download(job.Hash, job.Addr)
+	}
 }
 
 func (w *Wire) handleEvent(event *Event) {
 	switch event.Type {
 	case EventError:
-		// fmt.Println(event.Reason)
-		w.Result <- NewError(event.Reason)
+		w.Handler(NewErrorResult(event.Hash))
+		w.Idle = true
 		return
 	case EventDone:
-		fmt.Println("********************************")
-		fmt.Println(event.Result.Hash.Hex())
-		fmt.Println(event.Result.Hash.Magnet())
-		fmt.Println(event.Result.Name)
-		if event.Result.Length != 0 {
-			fmt.Println(event.Result.Length)
-		}
-		if len(event.Result.Files) != 0 {
-			fmt.Println("========FILES==========")
-			for _, f := range event.Result.Files {
-				fmt.Printf("\t%s (%d)\n", strings.Join(f.Path, "/"), f.Length)
-			}
-			fmt.Println("=======================")
-		}
-		fmt.Println("********************************\n")
-		w.Result <- event.Result
+		w.Handler(event.Result)
+		w.Idle = true
 	case EventHandshake:
 		// fmt.Println("Handshake success")
 	case EventExtended:
@@ -141,9 +139,20 @@ func (w *Wire) handleEvent(event *Event) {
 }
 
 func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
-	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*2)
+	result, err := HttpDownload(hash)
+	if err == nil {
+		w.Handler(result)
+		w.Idle = true
+		return
+	}
+	w.download(hash, addr)
+}
+
+func (w *Wire) download(hash Hash, addr *net.TCPAddr) {
+	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*3)
 	if err != nil {
-		w.Result <- NewError(err.Error())
+		w.Handler(NewErrorResult(hash))
+		w.Idle = true
 		return
 	}
 	w.Processor.Conn = conn
@@ -152,7 +161,8 @@ func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			w.Result <- NewError(err.Error())
+			w.Handler(NewErrorResult(hash))
+			w.Idle = true
 			break
 		}
 		w.Processor.Write(buf[:n])
@@ -187,7 +197,7 @@ func (p *Processor) process(size int, handler DataHandler) {
 }
 
 func (p *Processor) End(reason string) {
-	p.event(NewErrorEvent(reason))
+	p.event(NewErrorEvent(reason, p.Hash))
 	p.Conn.Close()
 }
 

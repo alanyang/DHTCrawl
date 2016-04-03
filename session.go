@@ -6,14 +6,6 @@ import (
 	"net"
 )
 
-// type Protocol struct {
-// 	Addr   *net.UDPAddr
-// 	Cmd    string                 //find_node, get_peers, annouce_peer, ping
-// 	Params map[string]interface{} //protocol field 'a' or 'r'
-// 	Type   string                 //response or query
-// 	Tid    string                 //protocol field 't'
-// }
-
 type Session struct {
 	Conn   *net.UDPConn
 	result chan *Result
