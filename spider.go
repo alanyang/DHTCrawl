@@ -46,7 +46,7 @@ func NewDefaultConfig() *DHTConfig {
 		RemoteServer:  "127.0.0.1:1128",
 		TokenValidity: 5,
 		Port:          2412,
-		JobSize:       1,
+		JobSize:       300,
 		DBPath: func() string {
 			switch runtime.GOOS {
 			case "linux":
@@ -118,7 +118,7 @@ func (d *DHT) Run() {
 							// dc.CallAsync("Fetch", fmt.Sprintf("%X|%s", []byte(r.Hash), r.TCPAddr.String()))
 							// wire := NewWire()
 							// go wire.Download(r.Hash, r.TCPAddr)
-							// go HttpDownload(r.Hash)
+							// go Htt300Download(r.Hash)
 							d.JobPool.Add(NewJob(r.Hash, r.TCPAddr))
 						}
 					}

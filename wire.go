@@ -121,14 +121,12 @@ func NewWire(h ResultHandler) *Wire {
 func (w *Wire) Release() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	fmt.Println("Release")
 	w.Idle = true
 }
 
 func (w *Wire) Acquire() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	fmt.Println("Acquire")
 	w.Idle = false
 }
 
@@ -151,6 +149,7 @@ func (w *Wire) handleEvent(event *Event) {
 	case EventError:
 		w.Handler(NewErrorResult(event.Hash))
 	case EventDone:
+		fmt.Println("Alan!!Yang!!Wire!!")
 		w.Handler(event.Result)
 	case EventHandshake:
 		// fmt.Println("Handshake success")
@@ -168,7 +167,6 @@ func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
 		w.Handler(result)
 		return
 	}
-	fmt.Println("out http download")
 	w.download(hash, addr)
 }
 
