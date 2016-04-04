@@ -13,6 +13,7 @@ func main() {
 	dht := crawl.NewDHT(nil)
 	num := 0
 	dht.HandleHash(func(hash crawl.Hash) bool {
+		return true
 		key := []byte(hash)
 		_, err := dht.DB.Get(key, nil)
 		//not found

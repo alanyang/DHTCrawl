@@ -24,6 +24,14 @@ func NewSession(port int) (*Session, error) {
 		return nil, err
 	}
 
+	if err = conn.SetWriteBuffer(1 << 20); err != nil {
+		return nil, err
+	}
+
+	if err = conn.SetReadBuffer(1 << 20); err != nil {
+		return nil, err
+	}
+
 	session := &Session{Conn: conn, result: make(chan *Result), rpc: NewRPC()}
 	log.Printf("Start Crawl on %s", conn.LocalAddr().String())
 	go session.serve()
