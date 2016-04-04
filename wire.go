@@ -9,6 +9,7 @@ import (
 	"github.com/zeebo/bencode"
 	"math"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -90,7 +91,7 @@ type (
 
 	Wire struct {
 		Processor *Processor
-		Handler   ResultHandler
+		Result    chan *MetadataResult
 		Idle      bool
 		Job       chan *Job
 		mu        *sync.RWMutex
@@ -105,9 +106,9 @@ func NewErrorEvent(reason string, hash Hash) *Event {
 	return &Event{Type: EventError, Reason: reason, Hash: hash}
 }
 
-func NewWire(h ResultHandler) *Wire {
+func NewWire(c chan *MetadataResult) *Wire {
 	wire := new(Wire)
-	wire.Handler = h
+	wire.Result = c
 	wire.Job = make(chan *Job)
 	wire.mu = new(sync.RWMutex)
 	wire.Processor = &Processor{
@@ -147,20 +148,23 @@ func (w *Wire) wait() {
 	}
 }
 
-func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
+func (w *Wire) Download(hash Hash, addr *net.TCPAddr) (result *MetadataResult, err error) {
 	defer w.Release()
-	// result, err := HttpDownload(hash)
-	// if err == nil {
-	// 	w.Handler(result)
-	// 	return
-	// }
-	result, err := w.wireDownload(hash, addr)
+	result, err = w.fromPeer(hash, addr)
 	if err == nil {
-		w.Handler(result)
+		w.Result <- result
+		return
 	}
+
+	result, err = w.fromHTTP(hash)
+	if err == nil {
+		w.Result <- result
+		return
+	}
+	return
 }
 
-func (w *Wire) wireDownload(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
+func (w *Wire) fromPeer(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
 	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*WireConnectTimeout)
 	if err != nil {
 		return nil, err
@@ -196,6 +200,32 @@ func (w *Wire) wireDownload(hash Hash, addr *net.TCPAddr) (*MetadataResult, erro
 		}
 	}
 	return nil, errors.New("Socket timeout")
+}
+
+func (w *Wire) fromHTTP(hash Hash) (*MetadataResult, error) {
+	hex := hash.Hex()
+	url := fmt.Sprintf("%s/%s/%s/%s.torrent", Url, hex[:2], hex[38:], hex)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Referer", Url)
+	client := http.Client{
+		Timeout: time.Duration(time.Second * 2),
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	dec := bencode.NewDecoder(resp.Body)
+	metadata := new(MetaData)
+	err = dec.Decode(metadata)
+	if err != nil {
+		return nil, err
+	}
+	metadata.MetaInfo.Hash = hash
+	return metadata.MetaInfo, nil
 }
 
 func (p *Processor) Write(data []byte) (int, error) {

@@ -12,14 +12,15 @@ type (
 		Addr *net.TCPAddr
 	}
 	WireJob struct {
-		Size      int
-		Running   bool
-		jobChan   chan *Job
-		Result    chan *MetadataResult
-		stopChan  chan int
-		worker    []*Wire
-		started   *Set
-		jobsQueue *Set
+		Size       int
+		Running    bool
+		jobChan    chan *Job
+		resultChan chan *MetadataResult
+		Result     chan *MetadataResult
+		stopChan   chan int
+		worker     []*Wire
+		started    *Set
+		jobsQueue  *Set
 	}
 
 	Set struct {
@@ -76,15 +77,16 @@ func NewJob(hash Hash, addr *net.TCPAddr) *Job {
 
 func NewWireJob(size int) *WireJob {
 	wj := &WireJob{
-		Size:      size,
-		Result:    make(chan *MetadataResult),
-		jobChan:   make(chan *Job),
-		worker:    []*Wire{},
-		started:   NewSet(),
-		jobsQueue: NewSet(),
+		Size:       size,
+		Result:     make(chan *MetadataResult),
+		resultChan: make(chan *MetadataResult),
+		jobChan:    make(chan *Job),
+		worker:     []*Wire{},
+		started:    NewSet(),
+		jobsQueue:  NewSet(),
 	}
 	for i := 0; i < size; i++ {
-		wire := NewWire(wj.handleResult)
+		wire := NewWire(wj.resultChan)
 		wj.worker = append(wj.worker, wire)
 	}
 	go wj.Start()
@@ -97,6 +99,8 @@ func (j *WireJob) Start() {
 		select {
 		case job := <-j.jobChan:
 			j.addJob(job)
+		case result := <-j.resultChan:
+			j.handleResult(result)
 		case <-j.stopChan:
 			j.Running = false
 			return
