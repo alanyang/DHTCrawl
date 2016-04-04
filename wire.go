@@ -172,16 +172,16 @@ func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
 }
 
 func (w *Wire) download(hash Hash, addr *net.TCPAddr) {
-	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*3)
+	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*2)
 	if err != nil {
 		w.Handler(NewErrorResult(hash))
 		return
 	}
+	conn.SetDeadline(time.Now().Add(time.Second * 5))
 	w.Processor.Conn = conn
 	w.Processor.Start(hash)
-	buf := make([]byte, 512)
 	for {
-		conn.SetReadDeadline(time.Now().Add(time.Second * WireReadTimeout))
+		buf := make([]byte, 512)
 		n, err := conn.Read(buf)
 		if err != nil {
 			w.Handler(NewErrorResult(hash))
@@ -321,6 +321,11 @@ func (p *Processor) handlePiece(data []byte) {
 		return
 	}
 
+	if len(piece) > PieceSize {
+		p.End("invalid piece size")
+		return
+	}
+
 	p.metadata[int(n)] = piece
 	if p.isDone() {
 		p.handleDone()
@@ -396,6 +401,5 @@ func (p *Processor) packetPieceRequestData(i int) []byte {
 }
 
 func (p *Processor) push(b []byte) {
-	p.Conn.SetWriteDeadline(time.Now().Add(time.Second * WireWriteTimeout))
 	p.Conn.Write(b)
 }
