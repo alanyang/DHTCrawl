@@ -2,10 +2,10 @@ package DHTCrawl
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"encoding/binary"
 	"fmt"
 	"github.com/zeebo/bencode"
-	"io/ioutil"
 	"math"
 	"net"
 	"sync"
@@ -338,18 +338,13 @@ func (p *Processor) isDone() (b bool) {
 
 func (p *Processor) handleDone() {
 	data := bytes.Join(p.metadata, []byte{})
+	s := sha1.Sum(data)
+	fmt.Println(p.Hash.Hex(), fmt.Sprintf("%X", s))
 	result := new(MetadataResult)
 	decoder := bencode.NewDecoder(bytes.NewReader(data))
 	err := decoder.Decode(&result)
 	if err != nil {
 		p.End(fmt.Sprintf("Decode metadata error %s", err.Error()))
-		ret := make(map[string]interface{})
-		err := bencode.DecodeBytes(data, &ret)
-		if err != nil {
-			fmt.Println(data[:10], data[len(data)-10:])
-			fmt.Println(err.Error())
-			ioutil.WriteFile("./metadata.torrent", data, 0666)
-		}
 		return
 	}
 	//check sha1 sum equal hash?
