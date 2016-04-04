@@ -13,7 +13,6 @@ type (
 	}
 	WireJob struct {
 		Size       int
-		Running    bool
 		jobChan    chan *Job
 		resultChan chan *MetadataResult
 		Result     chan *MetadataResult
@@ -89,23 +88,17 @@ func NewWireJob(size int) *WireJob {
 		wire := NewWire(wj.resultChan)
 		wj.worker = append(wj.worker, wire)
 	}
-	go wj.Start()
-	return wj
-}
-
-func (j *WireJob) Start() {
-	j.Running = true
-	for {
-		select {
-		case job := <-j.jobChan:
-			j.addJob(job)
-		case result := <-j.resultChan:
-			j.handleResult(result)
-		case <-j.stopChan:
-			j.Running = false
-			return
+	go func() {
+		for {
+			wj.handleResult(<-wj.resultChan)
 		}
-	}
+	}()
+	go func() {
+		for {
+			wj.addJob(<-wj.jobChan)
+		}
+	}()
+	return wj
 }
 
 func (j *WireJob) handleResult(r *MetadataResult) {

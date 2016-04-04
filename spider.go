@@ -37,8 +37,8 @@ type (
 )
 
 var (
-	DBValueUnDownload = []byte{0x01}
-	// DBValueDownloading = []byte{0x02}
+// DBValueUnDownload = []byte{0x01}
+// DBValueDownloading = []byte{0x02}
 )
 
 func NewDefaultConfig() *DHTConfig {
@@ -46,7 +46,7 @@ func NewDefaultConfig() *DHTConfig {
 		RemoteServer:  "127.0.0.1:1128",
 		TokenValidity: 5,
 		Port:          2412,
-		JobSize:       10,
+		JobSize:       300,
 		DBPath: func() string {
 			switch runtime.GOOS {
 			case "linux":
@@ -88,39 +88,41 @@ func NewDHT(cfg *DHTConfig) *DHT {
 
 func (d *DHT) Run() {
 	go d.Walk()
+	go func() {
+		for {
+			data := <-d.JobPool.Result
+			if d.MetadataHandler != nil {
+				d.MetadataHandler(data)
+			}
+		}
+	}()
 
 	// d.RPCClient.Start()
 	// defer d.RPCClient.Stop()
 	// dc := Dispatcher.NewServiceClient("FetchMetaInfo", d.RPCClient)
 	for {
-		select {
-		case data := <-d.JobPool.Result:
-			if d.MetadataHandler != nil {
-				d.MetadataHandler(data)
+		r := <-d.Session.result
+		switch r.Cmd {
+		case OP_FIND_NODE:
+			for _, node := range r.Nodes {
+				d.Table.Add(node)
 			}
-		case r := <-d.Session.result:
-			switch r.Cmd {
-			case OP_FIND_NODE:
-				for _, node := range r.Nodes {
-					d.Table.Add(node)
-				}
-			case OP_GET_PEERS:
-				ns := ConvertByteStream(d.Table.Last)
-				d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
+		case OP_GET_PEERS:
+			ns := ConvertByteStream(d.Table.Last)
+			d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
 
-			case OP_ANNOUNCE_PEER:
-				if d.Token.IsValid(r.Token) {
-					d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
-					if d.HashHandler != nil {
-						need := d.HashHandler(r.Hash)
-						if need {
-							//fetch metadata info from tcp port (bep_09, bep_10)
-							// dc.CallAsync("Fetch", fmt.Sprintf("%X|%s", []byte(r.Hash), r.TCPAddr.String()))
-							// wire := NewWire()
-							// go wire.Download(r.Hash, r.TCPAddr)
-							// go Htt300Download(r.Hash)
-							d.JobPool.Add(NewJob(r.Hash, r.TCPAddr))
-						}
+		case OP_ANNOUNCE_PEER:
+			if d.Token.IsValid(r.Token) {
+				d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
+				if d.HashHandler != nil {
+					need := d.HashHandler(r.Hash)
+					if need {
+						//fetch metadata info from tcp port (bep_09, bep_10)
+						// dc.CallAsync("Fetch", fmt.Sprintf("%X|%s", []byte(r.Hash), r.TCPAddr.String()))
+						// wire := NewWire()
+						// go wire.Download(r.Hash, r.TCPAddr)
+						// go HttpDownload(r.Hash)
+						d.JobPool.Add(NewJob(r.Hash, r.TCPAddr))
 					}
 				}
 			}

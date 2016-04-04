@@ -123,14 +123,12 @@ func NewWire(c chan *MetadataResult) *Wire {
 func (w *Wire) Release() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	fmt.Println("Release")
 	w.Idle = true
 }
 
 func (w *Wire) Acquire() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	fmt.Println("Acquire")
 	w.Idle = false
 }
 
@@ -183,6 +181,7 @@ func (w *Wire) fromPeer(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
 			w.Processor.Write(buf[:n])
 		}
 	}(conn)
+	timeout := time.After(time.Second * (WireTimeout + 1))
 	for {
 		select {
 		case event := <-w.Processor.event:
@@ -195,7 +194,7 @@ func (w *Wire) fromPeer(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
 			case EventExtended:
 			case EventPiece:
 			}
-		case <-time.After(time.Second * (WireTimeout + 1)):
+		case <-timeout:
 			return nil, errors.New("TCP timeout")
 		}
 	}

@@ -7,18 +7,18 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 func main() {
 	dht := crawl.NewDHT(nil)
 	num := 0
 	dht.HandleHash(func(hash crawl.Hash) bool {
-		return true
 		key := []byte(hash)
 		_, err := dht.DB.Get(key, nil)
 		//not found
 		if err != nil {
-			err = dht.DB.Put(key, crawl.DBValueUnDownload, nil)
+			err = dht.DB.Put(key, []byte(time.Now().String()), nil)
 			if err != nil {
 				log.Fatal(err)
 				return false
