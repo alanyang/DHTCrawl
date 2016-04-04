@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/zeebo/bencode"
+	"io/ioutil"
 	"math"
 	"net"
 	"sync"
@@ -346,6 +347,8 @@ func (p *Processor) handleDone() {
 		err := bencode.DecodeBytes(data, &ret)
 		if err != nil {
 			fmt.Println(data[:10], data[len(data)-10:])
+			fmt.Println(err.Error())
+			ioutil.WriteFile("./metadata.torrent", data, 0666)
 		}
 		return
 	}
