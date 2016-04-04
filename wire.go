@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/zeebo/bencode"
 	"math"
@@ -20,8 +21,8 @@ const (
 	PieceSize       = 1 << 14
 	MaxMetadataSize = (1 << 20) * 15
 
-	WireWriteTimeout = 2
-	WireReadTimeout  = 4
+	WireConnectTimeout = 2
+	WireTimeout        = 5
 
 	EventError = iota - 1
 	EventHandshake
@@ -37,7 +38,6 @@ var (
 
 type (
 	DataHandler   func([]byte)
-	EventHandler  func(*Event)
 	ResultHandler func(*MetadataResult)
 
 	File struct {
@@ -83,7 +83,7 @@ type (
 		metadataSize int
 		pieceLength  int
 
-		event EventHandler
+		event chan *Event
 
 		Conn net.Conn
 	}
@@ -112,7 +112,7 @@ func NewWire(h ResultHandler) *Wire {
 	wire.mu = new(sync.RWMutex)
 	wire.Processor = &Processor{
 		Data:  [][]byte{},
-		event: wire.handleEvent,
+		event: make(chan *Event),
 	}
 	wire.Release()
 	go wire.wait()
@@ -122,12 +122,14 @@ func NewWire(h ResultHandler) *Wire {
 func (w *Wire) Release() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	fmt.Println("Release")
 	w.Idle = true
 }
 
 func (w *Wire) Acquire() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	fmt.Println("Acquire")
 	w.Idle = false
 }
 
@@ -145,22 +147,6 @@ func (w *Wire) wait() {
 	}
 }
 
-func (w *Wire) handleEvent(event *Event) {
-	switch event.Type {
-	case EventError:
-		w.Handler(NewErrorResult(event.Hash))
-	case EventDone:
-		fmt.Println("Alan!!Yang!!Wire!!")
-		w.Handler(event.Result)
-	case EventHandshake:
-		// fmt.Println("Handshake success")
-	case EventExtended:
-		// fmt.Println("Extended success")
-	case EventPiece:
-		// fmt.Println("piece success")
-	}
-}
-
 func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
 	defer w.Release()
 	// result, err := HttpDownload(hash)
@@ -168,27 +154,48 @@ func (w *Wire) Download(hash Hash, addr *net.TCPAddr) {
 	// 	w.Handler(result)
 	// 	return
 	// }
-	w.download(hash, addr)
+	result, err := w.wireDownload(hash, addr)
+	if err == nil {
+		w.Handler(result)
+	}
 }
 
-func (w *Wire) download(hash Hash, addr *net.TCPAddr) {
-	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*2)
+func (w *Wire) wireDownload(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
+	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*WireConnectTimeout)
 	if err != nil {
-		w.Handler(NewErrorResult(hash))
-		return
+		return nil, err
 	}
-	conn.SetDeadline(time.Now().Add(time.Second * 5))
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(time.Second * WireTimeout))
 	w.Processor.Conn = conn
 	w.Processor.Start(hash)
-	for {
-		buf := make([]byte, 512)
-		n, err := conn.Read(buf)
-		if err != nil {
-			w.Handler(NewErrorResult(hash))
-			return
+	go func(conn net.Conn) {
+		for {
+			buf := make([]byte, 1024)
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			w.Processor.Write(buf[:n])
 		}
-		w.Processor.Write(buf[:n])
+	}(conn)
+	for {
+		select {
+		case event := <-w.Processor.event:
+			switch event.Type {
+			case EventError:
+				return nil, errors.New(event.Reason)
+			case EventDone:
+				return event.Result, nil
+			case EventHandshake:
+			case EventExtended:
+			case EventPiece:
+			}
+		case <-time.After(time.Second * (WireTimeout + 1)):
+			return nil, errors.New("TCP timeout")
+		}
 	}
+	return nil, errors.New("Socket timeout")
 }
 
 func (p *Processor) Write(data []byte) (int, error) {
@@ -219,8 +226,7 @@ func (p *Processor) process(size int, handler DataHandler) {
 }
 
 func (p *Processor) End(reason string) {
-	p.event(NewErrorEvent(reason, p.Hash))
-	p.Conn.Close()
+	p.event <- NewErrorEvent(reason, p.Hash)
 }
 
 func (p *Processor) handleHandshake() {
@@ -237,7 +243,7 @@ func (p *Processor) handleHandshake() {
 				p.End("peer reject")
 				return
 			}
-			p.event(&Event{Type: EventHandshake})
+			p.event <- &Event{Type: EventHandshake}
 			p.process(4, p.handleHead)
 			p.push(p.packetExtendedData())
 		})
@@ -274,7 +280,7 @@ func (p *Processor) handleExtended(ext byte, data []byte) {
 }
 
 func (p *Processor) handleExtHandshake(ext map[string]interface{}) {
-	p.event(&Event{Type: EventExtended})
+	p.event <- &Event{Type: EventExtended}
 	if size, ok := ext["metadata_size"].(int64); ok {
 		if m, ok := ext["m"].(map[string]interface{}); ok {
 			if meta, ok := m["ut_metadata"].(int64); ok {
@@ -296,7 +302,7 @@ func (p *Processor) handleExtHandshake(ext map[string]interface{}) {
 }
 
 func (p *Processor) handlePiece(data []byte) {
-	p.event(&Event{Type: EventPiece})
+	p.event <- &Event{Type: EventPiece}
 	i := bytes.Index(data, []byte{101, 101}) + 2
 	if i == 1 {
 		p.End("invalid piece info dict")
@@ -344,20 +350,18 @@ func (p *Processor) isDone() (b bool) {
 func (p *Processor) handleDone() {
 	data := bytes.Join(p.metadata, []byte{})
 	s := sha1.Sum(data)
-	fmt.Println(p.Hash.Hex(), fmt.Sprintf("%X", s))
-	result := new(MetadataResult)
-	decoder := bencode.NewDecoder(bytes.NewReader(data))
-	err := decoder.Decode(&result)
-	if err != nil {
-		p.End(fmt.Sprintf("Decode metadata error %s", err.Error()))
-		return
+	if p.Hash.Hex() == fmt.Sprintf("%X", s) {
+		result := new(MetadataResult)
+		decoder := bencode.NewDecoder(bytes.NewReader(data))
+		err := decoder.Decode(&result)
+		if err != nil {
+			p.End(fmt.Sprintf("Decode metadata error %s", err.Error()))
+			return
+		}
+		result.Hash = p.Hash
+		p.Conn.Close()
+		p.event <- &Event{Type: EventDone, Result: result}
 	}
-	//check sha1 sum equal hash?
-	// s := sha1.Sum(data)
-	// fmt.Println(s, []byte(p.Hash))
-	result.Hash = p.Hash
-	p.Conn.Close()
-	p.event(&Event{Type: EventDone, Result: result})
 }
 
 func (p *Processor) packetHandshakeData() []byte {
