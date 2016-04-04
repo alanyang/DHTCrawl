@@ -144,15 +144,6 @@ func (d *DHT) Walk() {
 			d.Join()
 			time.Sleep(time.Millisecond * 800)
 		} else {
-			// d.Table.Mutex.Lock()
-			// nodes := d.Table.Nodes[:]
-			// d.Table.Mutex.Unlock()
-			// for _, node := range nodes {
-			// 	if node != nil {
-			// 		d.Session.SendTo(PacketFindNode(node.ID.Neighbor(), NewNodeID()), node.Addr)
-			// 		time.Sleep(time.Millisecond * 2)
-			// 	}
-			// }
 			d.Table.Each(func(node *Node, _ int) {
 				d.Session.SendTo(PacketFindNode(node.ID.Neighbor(), NewNodeID()), node.Addr)
 				time.Sleep(time.Millisecond * 2)

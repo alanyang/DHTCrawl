@@ -342,10 +342,11 @@ func (p *Processor) handleDone() {
 	err := decoder.Decode(&result)
 	if err != nil {
 		p.End(fmt.Sprintf("Decode metadata error %s", err.Error()))
-		fmt.Println(string(data))
 		ret := make(map[string]interface{})
 		err := bencode.DecodeBytes(data, &ret)
-		fmt.Println(err)
+		if err != nil {
+			fmt.Println(data[:10], data[len(data)-10:])
+		}
 		return
 	}
 	//check sha1 sum equal hash?
