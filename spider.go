@@ -37,8 +37,9 @@ type (
 )
 
 var (
-// DBValueUnDownload = []byte{0x01}
-// DBValueDownloading = []byte{0x02}
+	// DBValueUnDownload = []byte{0x01}
+	// DBValueDownloading = []byte{0x02}
+	DBValueUnIndexID = []byte{0x00, 0x00}
 )
 
 func NewDefaultConfig() *DHTConfig {

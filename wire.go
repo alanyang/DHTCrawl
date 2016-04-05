@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -42,25 +43,28 @@ type (
 	ResultHandler func(*MetadataResult)
 
 	File struct {
-		Path   []string `bencode:"path"`
-		UPath  []string `bencode:"path.utf-8"`
-		Length int64    `bencode:"length"`
-		Md5sum string   `bencode:"md5sum"`
+		Path   []string `bencode:"path" json:"path,omitempty"`
+		UPath  []string `bencode:"path.utf-8" json:"upath,omitempty"`
+		Length int64    `bencode:"length" json:"length,omitempty"`
+		Md5sum string   `bencode:"md5sum" json:"-"`
 	}
 
 	MetadataResult struct {
-		Hash          Hash
-		Length        int64                  `bencode:"length"`
-		Name          string                 `bencode:"name"`
-		UName         string                 `bencode:"name.utf-8"`
-		PieceLength   int64                  `bencode:"piece length"`
-		Pieces        interface{}            `bencode:"pieces"`
-		Publisher     string                 `bencode:"publisher"`
-		UPublisher    string                 `bencode:"publisher.utf-8"`
-		PublisherUrl  string                 `bencode:"publisher-url"`
-		UPublisherUrl string                 `bencode:"publisher-url.utf-8"`
-		Files         []*File                `bencode:"files"`
-		MetaInfo      map[string]interface{} `bencode:"info"`
+		Hash          Hash        `json:"hash"`
+		Hex           string      `json:"hex"`
+		Length        int64       `bencode:"length" json:"length,omitempty"`
+		Name          string      `bencode:"name" json:"name"`
+		UName         string      `bencode:"name.utf-8" json:"uname,omitempty"`
+		PieceLength   int64       `bencode:"piece length" json:"-"`
+		Pieces        interface{} `bencode:"pieces" json:"-"`
+		Publisher     string      `bencode:"publisher" json:"publisher,omitempty"`
+		UPublisher    string      `bencode:"publisher.utf-8" json:"uublisher,omitempty"`
+		PublisherUrl  string      `bencode:"publisher-url" json:"publisherUrl,omitempty"`
+		UPublisherUrl string      `bencode:"publisher-url.utf-8" json:"publisherUrl,omitempty"`
+		Files         []*File     `bencode:"files" json:"files,omitempty"`
+
+		Create   string `json:"create,omitempty"`
+		Download int    `json:"download,omitempty"`
 	}
 
 	Event struct {
@@ -118,6 +122,27 @@ func NewWire(c chan *MetadataResult) *Wire {
 	wire.Release()
 	go wire.wait()
 	return wire
+}
+
+func (m *MetadataResult) String() string {
+	s := []string{
+		"********************************",
+		m.Hash.Hex(),
+		m.Hash.Magnet(),
+		m.Name,
+	}
+	if m.Length != 0 {
+		s = append(s, fmt.Sprintf("%d", m.Length))
+	}
+	if len(m.Files) != 0 {
+		s = append(s, "========FILES==========")
+		for _, f := range m.Files {
+			s = append(s, fmt.Sprintf("\t%s (%d)", strings.Join(f.Path, "/"), f.Length))
+		}
+		s = append(s, "=======================")
+	}
+	s = append(s, "********************************\n\n")
+	return strings.Join(s, "\n")
 }
 
 func (w *Wire) Release() {

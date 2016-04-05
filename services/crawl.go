@@ -2,15 +2,29 @@ package main
 
 import (
 	crawl "DHTCrawl"
-	"bytes"
-	"encoding/gob"
-	"fmt"
 	"log"
-	"strings"
 	"time"
 )
 
+const (
+	Iso8601Format = "2006-01-02T15:04:05"
+)
+
+func Iso8601Now() string {
+	return time.Now().Format(Iso8601Format)
+}
+
 func main() {
+	ela, err := crawl.NewElastic("http://127.0.0.1:9200")
+	if err != nil {
+		log.Fatal(err)
+	}
+	// if err = ela.CreateIndex(); err != nil {
+	// 	log.Fatal(err, "2")
+	// }
+	// if err = ela.CreateMapping(); err != nil {
+	// 	log.Fatal(err, "3")
+	// }
 	dht := crawl.NewDHT(nil)
 	num := 0
 	dht.HandleHash(func(hash crawl.Hash) bool {
@@ -18,7 +32,7 @@ func main() {
 		_, err := dht.DB.Get(key, nil)
 		//not found
 		if err != nil {
-			err = dht.DB.Put(key, []byte(time.Now().String()), nil)
+			err = dht.DB.Put(key, crawl.DBValueUnIndexID, nil)
 			if err != nil {
 				log.Fatal(err)
 				return false
@@ -28,31 +42,18 @@ func main() {
 		return false
 	})
 	dht.HandleMetadata(func(info *crawl.MetadataResult) {
-		num++
 		log.Println(num)
-		fmt.Println("********************************")
-		fmt.Println(info.Hash.Hex())
-		fmt.Println(info.Hash.Magnet())
-		fmt.Println(info.Name)
-		if info.Length != 0 {
-			fmt.Println(info.Length)
-		}
-		if len(info.Files) != 0 {
-			fmt.Println("========FILES==========")
-			for _, f := range info.Files {
-				fmt.Printf("\t%s (%d)\n", strings.Join(f.Path, "/"), f.Length)
-			}
-			fmt.Println("=======================")
-		}
-		fmt.Println("********************************\n")
-		key := []byte(info.Hash)
-		buf := new(bytes.Buffer)
-		en := gob.NewEncoder(buf)
-		err := en.Encode(*info)
+		println(info.String())
+		info.Hex = info.Hash.Hex()
+		info.Create = Iso8601Now()
+		info.Download = 1
+		id, err := ela.Index(info)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("index %s error: %s", info.Hash.Hex(), err.Error())
+			return
 		}
-		err = dht.DB.Put(key, buf.Bytes(), nil)
+		key := []byte(info.Hash)
+		err = dht.DB.Put(key, []byte(id), nil)
 		if err != nil {
 			log.Fatal(err)
 		}
