@@ -8,10 +8,6 @@
 			"Rev": "3675542200b9752da8f113251b47f0d5b372f414"
 		},
 		{
-			"ImportPath": "github.com/jackpal/bencode-go",
-			"Rev": "8b8d9a9b37fcd43f365439810d725081b114af68"
-		},
-		{
 			"ImportPath": "github.com/syndtr/goleveldb/leveldb",
 			"Rev": "93fc893f2dadb96ffde441c7546cc67ea290a3a8"
 		},
