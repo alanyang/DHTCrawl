@@ -90,8 +90,7 @@ func NewDHT(cfg *DHTConfig) *DHT {
 func (d *DHT) Run() {
 	go d.Walk()
 	go func() {
-		for {
-			data := <-d.JobPool.Result
+		for data := range d.JobPool.Result {
 			if d.MetadataHandler != nil {
 				d.MetadataHandler(data)
 			}
@@ -108,6 +107,10 @@ func (d *DHT) Run() {
 			for _, node := range r.Nodes {
 				d.Table.Add(node)
 			}
+
+		case OP_PING:
+			d.Session.SendTo(PacketPong(r.ID, r.Tid), r.UDPAddr)
+
 		case OP_GET_PEERS:
 			ns := ConvertByteStream(d.Table.Last)
 			d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
@@ -119,10 +122,6 @@ func (d *DHT) Run() {
 					need := d.HashHandler(r.Hash)
 					if need {
 						//fetch metadata info from tcp port (bep_09, bep_10)
-						// dc.CallAsync("Fetch", fmt.Sprintf("%X|%s", []byte(r.Hash), r.TCPAddr.String()))
-						// wire := NewWire()
-						// go wire.Download(r.Hash, r.TCPAddr)
-						// go HttpDownload(r.Hash)
 						d.JobPool.Add(NewJob(r.Hash, r.TCPAddr))
 					}
 				}

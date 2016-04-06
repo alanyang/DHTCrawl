@@ -23,6 +23,7 @@ type (
 	Result struct {
 		Cmd     string
 		Hash    Hash
+		ID      NodeID
 		UDPAddr *net.UDPAddr
 		TCPAddr *net.TCPAddr
 		Token   string
@@ -75,6 +76,16 @@ func PacketAnnucePeer(hash Hash, id NodeID, tid string) []byte {
 	return b
 }
 
+func PacketPong(id NodeID, tid string) []byte {
+	d := map[string]interface{}{
+		"t": tid,
+		"y": TYPE_RESPONSE,
+		"r": map[string]string{"id": id.Neighbor().String()},
+	}
+	b, _ := bencode.EncodeBytes(d)
+	return b
+}
+
 func NewRPC() *RPC {
 	return &RPC{}
 }
@@ -111,6 +122,13 @@ func (r *RPC) HandleFindNode(resp map[string]interface{}) (ns []*Node) {
 		}
 	}
 	return
+}
+
+func (r *RPC) handlePing(args map[string]interface{}) NodeID {
+	if id, ok := args["id"].(string); ok {
+		return NodeID([]byte(id))
+	}
+	return nil
 }
 
 func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
@@ -160,6 +178,15 @@ func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 					TCPAddr: tcpAddr,
 					Token:   token,
 					Tid:     t,
+				}, nil
+			}
+		case OP_PING:
+			if id := r.handlePing(a); id != nil {
+				return &Result{
+					Cmd:     OP_PING,
+					UDPAddr: addr,
+					Tid:     t,
+					ID:      id,
 				}, nil
 			}
 		default:

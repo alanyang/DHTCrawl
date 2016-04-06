@@ -63,8 +63,8 @@ type (
 		UPublisherUrl string      `bencode:"publisher-url.utf-8" json:"publisherUrl,omitempty"`
 		Files         []*File     `bencode:"files" json:"files,omitempty"`
 
-		Create   string `json:"create,omitempty"`
-		Download int    `json:"download,omitempty"`
+		Create   string   `json:"create,omitempty"`
+		Download []string `json:"download,omitempty"`
 	}
 
 	Event struct {

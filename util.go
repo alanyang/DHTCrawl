@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -68,4 +71,41 @@ func StringToIPBytes(ip string) (b []byte) {
 		b = append(b, byte(p))
 	}
 	return
+}
+
+func DBPath() (p string) {
+	if runtime.GOOS == "linux" {
+		p = "/root/develop/db"
+	} else if runtime.GOOS == "darwin" {
+		p = "/Users/alanyang/Develop/db"
+	}
+	return
+}
+
+func ElasticUrl() (u string) {
+	if runtime.GOOS == "linux" {
+		u = ""
+	} else if runtime.GOOS == "darwin" {
+		u = "http://127.0.0.1:9200"
+	}
+	return
+}
+
+func RemoveAll(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	names, err := d.Readdirnames(-1)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		err = os.RemoveAll(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

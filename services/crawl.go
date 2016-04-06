@@ -15,21 +15,15 @@ func Iso8601Now() string {
 }
 
 func main() {
-	ela, err := crawl.NewElastic("http://127.0.0.1:9200")
+	ela, err := crawl.NewElastic(crawl.ElasticUrl())
 	if err != nil {
 		log.Fatal(err)
 	}
-	// if err = ela.CreateIndex(); err != nil {
-	// 	log.Fatal(err, "2")
-	// }
-	// if err = ela.CreateMapping(); err != nil {
-	// 	log.Fatal(err, "3")
-	// }
 	dht := crawl.NewDHT(nil)
 	num := 0
 	dht.HandleHash(func(hash crawl.Hash) bool {
 		key := []byte(hash)
-		_, err := dht.DB.Get(key, nil)
+		d, err := dht.DB.Get(key, nil)
 		//not found
 		if err != nil {
 			err = dht.DB.Put(key, crawl.DBValueUnIndexID, nil)
@@ -38,7 +32,21 @@ func main() {
 				return false
 			}
 			return true
+		} else {
+			id := string(d)
+			//undownload
+			if id == string(crawl.DBValueUnIndexID) {
+				return true
+			}
+			err := ela.Update(
+				id,
+				"ctx._source.download += n",
+				map[string]interface{}{"n": Iso8601Now()})
+			if err != nil {
+				log.Printf("Update download error %s\n", err.Error())
+			}
 		}
+
 		return false
 	})
 	dht.HandleMetadata(func(info *crawl.MetadataResult) {
@@ -46,7 +54,7 @@ func main() {
 		println(info.String())
 		info.Hex = info.Hash.Hex()
 		info.Create = Iso8601Now()
-		info.Download = 1
+		info.Download = []string{info.Create}
 		id, err := ela.Index(info)
 		if err != nil {
 			log.Printf("index %s error: %s", info.Hash.Hex(), err.Error())

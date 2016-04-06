@@ -37,10 +37,6 @@ const (
 					"type": "date",
 					"index": "no"
 				},
-				"download": {
-					"type": "integer",
-					"index": "no"
-				},
 				"files":{
                 	"properties":{
                     	"path":{"type":"string", "boost":"1.5"},
@@ -78,8 +74,14 @@ func (e *Elastic) IndexExists() (ok bool, err error) {
 }
 
 func (e *Elastic) DeleteIndex() (err error) {
-	e.Conn.DeleteIndex(Index)
-	return
+	resp, err := e.Conn.DeleteIndex(Index).Do()
+	if err != nil {
+		return err
+	}
+	if !resp.Acknowledged {
+		return errors.New("Delete index fail")
+	}
+	return nil
 }
 
 func (e *Elastic) CreateIndex() error {
@@ -129,4 +131,16 @@ func (e *Elastic) Index(meta *MetadataResult) (string, error) {
 		return "-1", err
 	}
 	return resp.Id, nil
+}
+
+func (e *Elastic) Update(id, script string, params map[string]interface{}) error {
+	s := elastic.NewScript(script).Params(params).Lang("groovy")
+	resp, err := e.Conn.Update().Index(Index).Type(Type).Id(id).Script(s).ScriptedUpsert(false).Do()
+	if err != nil {
+		return err
+	}
+	if resp.Id == "" {
+		return errors.New("Update fail")
+	}
+	return nil
 }
