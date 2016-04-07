@@ -26,6 +26,14 @@ const (
 	WireConnectTimeout = 2
 	WireTimeout        = 5
 
+	MetaTypeVideo    = 1
+	MetaTypeAudio    = 2
+	MetaTypePicture  = 3
+	MetaTypeDocument = 4
+	MetaTypeZip      = 5
+	MetaTypeExe      = 6
+	MetaTypeOther    = 7
+
 	EventError = iota - 1
 	EventHandshake
 	EventExtended
@@ -36,11 +44,20 @@ const (
 var (
 	//[5] = 1 as extension, [7] = 1 as dht
 	BtReserved = []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x01}
+
+	VideoTypeExtensions    = []string{"avi", "rmvb", "rm", "asf", "divx", "mpg", "mpeg", "mpe", "wmv", "mp4", "mkv", "vob", "fla", "3gp"}
+	AudioTypeExtensions    = []string{"mp3", "m4a", "wma"}
+	PictureTypeExtensions  = []string{"jpg", "jpeg", "png", "gif", "bmp", "psd", "tiff", "tga", "eps"}
+	DocumentTypeExtensions = []string{"doc", "docx", "pdf", "chm"}
+	ZipTypeExtensions      = []string{"zip", "rar", "7z", "cab", "iso", "gz", "bz2"}
+	ExeTypeExtensions      = []string{"exe"}
 )
 
 type (
 	DataHandler   func([]byte)
 	ResultHandler func(*MetadataResult)
+
+	Files []*File
 
 	File struct {
 		Path   []string `bencode:"path" json:"path,omitempty"`
@@ -63,6 +80,7 @@ type (
 		UPublisherUrl string      `bencode:"publisher-url.utf-8" json:"publisherUrl,omitempty"`
 		Files         []*File     `bencode:"files" json:"files,omitempty"`
 
+		Type     int      `json:"datatype,omitempty"`
 		Create   string   `json:"create,omitempty"`
 		Download []string `json:"download,omitempty"`
 	}
@@ -102,6 +120,38 @@ type (
 	}
 )
 
+func GetMetaType(ext string) int {
+	switch {
+	case InArray(VideoTypeExtensions, ext):
+		return MetaTypeVideo
+	case InArray(AudioTypeExtensions, ext):
+		return MetaTypeAudio
+	case InArray(PictureTypeExtensions, ext):
+		return MetaTypePicture
+	case InArray(DocumentTypeExtensions, ext):
+		return MetaTypeDocument
+	case InArray(ZipTypeExtensions, ext):
+		return MetaTypeZip
+	case InArray(ExeTypeExtensions, ext):
+		return MetaTypeExe
+	}
+	return MetaTypeOther
+}
+
+func GetExtension(path string) (ext string) {
+	es := strings.Split(path, ".")
+	return es[len(es)-1]
+}
+
+func InArray(arr []string, i string) (b bool) {
+	for _, v := range arr {
+		if i == v {
+			b = true
+		}
+	}
+	return
+}
+
 func NewErrorResult(hash Hash) *MetadataResult {
 	return &MetadataResult{Hash: hash}
 }
@@ -122,6 +172,18 @@ func NewWire(c chan *MetadataResult) *Wire {
 	wire.Release()
 	go wire.wait()
 	return wire
+}
+
+func (f Files) Len() int {
+	return len(f)
+}
+
+func (f Files) Less(i, j int) bool {
+	return f[i].Length < f[j].Length
+}
+
+func (f Files) Swap(i, j int) {
+	f[i], f[j] = f[j], f[i]
 }
 
 func (m *MetadataResult) String() string {

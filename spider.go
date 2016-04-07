@@ -47,7 +47,7 @@ func NewDefaultConfig() *DHTConfig {
 		RemoteServer:  "127.0.0.1:1128",
 		TokenValidity: 5,
 		Port:          2412,
-		JobSize:       300,
+		JobSize:       500,
 		DBPath: func() string {
 			switch runtime.GOOS {
 			case "linux":

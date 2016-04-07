@@ -37,6 +37,10 @@ const (
 					"type": "date",
 					"index": "no"
 				},
+				"datatype": {
+					"type": "integer",
+					"index": "no"
+				},
 				"files":{
                 	"properties":{
                     	"path":{"type":"string", "boost":"1.5"},

@@ -55,11 +55,14 @@ func (s *Set) Has(v interface{}) (ok bool) {
 	return
 }
 
-func (s *Set) Get() (val interface{}) {
+func (s *Set) Pop() (val interface{}) {
 	s.mu.RLock()
 	s.mu.RUnlock()
 	for _, v := range s.data {
 		val = v
+	}
+	if val != nil {
+		s.Delete(val)
 	}
 	return
 }
@@ -106,7 +109,7 @@ func (j *WireJob) handleResult(r *MetadataResult) {
 	if r.Name != "" {
 		j.Result <- r
 	}
-	if v := j.jobsQueue.Get(); v != nil {
+	if v := j.jobsQueue.Pop(); v != nil {
 		if job, ok := v.(*Job); ok {
 			j.addJob(job)
 		}
@@ -119,9 +122,10 @@ func (j *WireJob) addJob(job *Job) {
 			if w.IsIdle() {
 				j.started.Set(job.Hash)
 				w.Job <- job
-				break
+				return
 			}
 		}
+		fmt.Printf("Not has idle worker %s[%s]\n", job.Hash.Hex(), job.Addr.String())
 		j.jobsQueue.Set(job)
 	}
 }

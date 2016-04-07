@@ -3,6 +3,8 @@ package main
 import (
 	crawl "DHTCrawl"
 	"log"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -24,7 +26,6 @@ func main() {
 	dht.HandleHash(func(hash crawl.Hash) bool {
 		key := []byte(hash)
 		d, err := dht.DB.Get(key, nil)
-		//not found
 		if err != nil {
 			err = dht.DB.Put(key, crawl.DBValueUnIndexID, nil)
 			if err != nil {
@@ -50,11 +51,22 @@ func main() {
 		return false
 	})
 	dht.HandleMetadata(func(info *crawl.MetadataResult) {
+		defer func() { num++ }()
 		log.Println(num)
 		println(info.String())
 		info.Hex = info.Hash.Hex()
 		info.Create = Iso8601Now()
 		info.Download = []string{info.Create}
+		var ext string
+		if len(info.Files) != 0 {
+			fs := crawl.Files(info.Files)
+			sort.Sort(sort.Reverse(fs))
+			mainfile := fs[0]
+			ext = crawl.GetExtension(mainfile.Path[len(mainfile.Path)-1])
+		} else {
+			ext = crawl.GetExtension(info.Name)
+		}
+		info.Type = crawl.GetMetaType(strings.ToLower(ext))
 		id, err := ela.Index(info)
 		if err != nil {
 			log.Printf("index %s error: %s", info.Hash.Hex(), err.Error())
