@@ -2,10 +2,8 @@ package DHTCrawl
 
 import (
 	// "github.com/prestonTao/upnp"
-	"runtime"
 	//"string"
 	// "fmt"
-	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/valyala/gorpc"
 	"log"
 	"net"
@@ -24,7 +22,6 @@ type (
 		MetadataHandler ResultHandler
 		RPCClient       *gorpc.Client
 		JobPool         *WireJob
-		DB              *leveldb.DB
 	}
 
 	DHTConfig struct {
@@ -48,15 +45,6 @@ func NewDefaultConfig() *DHTConfig {
 		TokenValidity: 5,
 		Port:          2412,
 		JobSize:       500,
-		DBPath: func() string {
-			switch runtime.GOOS {
-			case "linux":
-				return "/root/develop/db"
-			case "darwin":
-				return "/Users/alanyang/Develop/db"
-			}
-			return ""
-		}(),
 	}
 }
 
@@ -68,17 +56,12 @@ func NewDHT(cfg *DHTConfig) *DHT {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := leveldb.OpenFile(cfg.DBPath, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
 	return &DHT{
 		Session:   session,
 		Table:     NewTable(),
 		Token:     NewToken(cfg.TokenValidity),
 		RPCClient: gorpc.NewTCPClient(cfg.RemoteServer),
 		JobPool:   NewWireJob(cfg.JobSize),
-		DB:        db,
 		Bootstraps: []string{
 			"67.215.246.10:6881",
 			"212.129.33.50:6881",

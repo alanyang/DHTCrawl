@@ -12,22 +12,17 @@ const (
 	{
 		"metainfo":{
 			"_all": {
-            	"analyzer": "smartcn",
-            	"search_analyzer": "smartcn",
             	"store": "true"
 			},
 			"properties":{
 				"name":{
 					"type":"string",
-					"boost": "2.0"
-				},
-				"hash": {
-					"type": "string",
-					"index": "not_analyzed"
+					"boost": "2.0",
+					"analyzer": "ik_max_word"
 				},
 				"hex": {
 					"type": "string",
-					"index": "not_analyzed"
+					"index": "no"
 				},
 				"length": {
 					"type": "long",
@@ -37,16 +32,25 @@ const (
 					"type": "date",
 					"index": "no"
 				},
+				"downloads": {
+					"type": "long",
+					"index": "no"
+				},
+				"last": {
+					"type": "date",
+					"index": "no"
+				},
 				"datatype": {
 					"type": "integer",
 					"index": "no"
 				},
 				"files":{
-                	"properties":{
-                    	"path":{"type":"string", "boost":"1.5"},
-                    	"upath":{"type":"string", "boost":"1.5"},
-                    	"length":{"type":"long", "index": "no"}
-                	}
+					"type" : "nested",
+					"include_in_parent": "true",
+					"properties": {
+						"path": {"type": "string", "boost": "1.5", "analyzer": "ik_max_word"},
+						"length": {"type": "long", "index": "no"}
+					}
             	}
 			}
 		}
@@ -54,10 +58,33 @@ const (
 	`
 )
 
+/*
+"properties":{
+                    	"path":{"type":"string", "boost":"1.5"},
+                    	"upath":{"type":"string", "boost":"1.5"},
+                    	"length":{"type":"long", "index": "no"}
+          }
+*/
 type (
 	Elastic struct {
 		Url  string
 		Conn *elastic.Client
+	}
+
+	MetaFile struct {
+		Path   string `json:"path,omitempty"`
+		Length int    `json:"length,omitempty"`
+	}
+
+	Metainfo struct {
+		Name      string      `json:"name,omitempty"`
+		Hex       string      `json:"hex,omitempty"`
+		Length    int         `json:"length,omitempty"`
+		Create    string      `json:"create,omitempty"`
+		Last      string      `json:"last,omitempty"`      //last download
+		Downloads int         `json:"downloads,omitempty"` //downloads count
+		Type      int         `json:"type,omitempty"`
+		Files     []*MetaFile `json:"files,omitempty"`
 	}
 )
 
@@ -129,7 +156,7 @@ func (e *Elastic) GetMapping() (interface{}, error) {
 	return prop, nil
 }
 
-func (e *Elastic) Index(meta *MetadataResult) (string, error) {
+func (e *Elastic) Index(meta *Metainfo) (string, error) {
 	resp, err := e.Conn.Index().Index(Index).Type(Type).BodyJson(*meta).Do()
 	if err != nil {
 		return "-1", err
