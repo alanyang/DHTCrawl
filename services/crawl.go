@@ -27,8 +27,11 @@ func MergeMetainfo(r *crawl.MetadataResult) *crawl.Metainfo {
 	info.Hex = r.Hash.Hex()
 	info.Length = int(r.Length)
 	info.Create = Iso8601Now()
+	info.Created = Iso8601Now()
 	info.Last = Iso8601Now()
+	info.Lasted = Iso8601Now()
 	info.Downloads = 1
+	info.Downloadeds = 1
 
 	var ext string
 	if len(r.Files) != 0 {
@@ -84,7 +87,7 @@ func main() {
 			}
 			err := ela.Update(
 				id,
-				"ctx._source.downloads += n;ctx._source.last = l;",
+				"ctx._source._downloads += n;ctx._source._last = l;ctx._source.downloads += n;ctx._source.last = l;",
 				map[string]interface{}{"n": 1, "l": Iso8601Now()})
 			if err != nil {
 				log.Printf("Update download error %s\n", err.Error())

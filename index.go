@@ -32,13 +32,22 @@ const (
 					"type": "date",
 					"index": "no"
 				},
+				"_create": {
+					"type": "date"
+				},
 				"downloads": {
 					"type": "long",
 					"index": "no"
 				},
+				"_downloads": {
+					"type": "long"
+				},
 				"last": {
 					"type": "date",
 					"index": "no"
+				},
+				"_last": {
+					"type": "date"
 				},
 				"datatype": {
 					"type": "integer",
@@ -77,14 +86,17 @@ type (
 	}
 
 	Metainfo struct {
-		Name      string      `json:"name,omitempty"`
-		Hex       string      `json:"hex,omitempty"`
-		Length    int         `json:"length,omitempty"`
-		Create    string      `json:"create,omitempty"`
-		Last      string      `json:"last,omitempty"`      //last download
-		Downloads int         `json:"downloads,omitempty"` //downloads count
-		Type      int         `json:"type,omitempty"`
-		Files     []*MetaFile `json:"files,omitempty"`
+		Name        string      `json:"name,omitempty"`
+		Hex         string      `json:"hex,omitempty"`
+		Length      int         `json:"length,omitempty"`
+		Create      string      `json:"create,omitempty"`
+		Created     string      `json:"_create,omitempty"`
+		Last        string      `json:"last,omitempty"` //last download
+		Lasted      string      `json:"_last,omitempty"`
+		Downloads   int         `json:"downloads,omitempty"` //downloads count
+		Downloadeds int         `json:"_downloads,omitempty"`
+		Type        int         `json:"type,omitempty"`
+		Files       []*MetaFile `json:"files,omitempty"`
 	}
 )
 
