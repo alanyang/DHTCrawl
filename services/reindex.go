@@ -24,7 +24,7 @@ func main() {
 	numFailed := 0
 
 	it := db.NewIterator(nil, nil)
-	script := elastic.NewScript(`ctx._source._downloads = ctx._source.downloads;ctx._source._last = ctx._source.last; ctx._source._create = ctx._source.create;`)
+	script := elastic.NewScript(`ctx._source._downloads = ctx._source.downloads;ctx._source._last = ctx._source.last; ctx._source._create = ctx._source.create;ctx._source._hex = ctx._source.hex;`)
 	for it.Next() {
 		id := string(it.Value())
 		if id != string(crawl.DBValueUnIndexID) {

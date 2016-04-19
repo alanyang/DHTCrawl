@@ -25,7 +25,9 @@ func MergeMetainfo(r *crawl.MetadataResult) *crawl.Metainfo {
 		info.Name = r.Name
 	}
 	info.Hex = r.Hash.Hex()
+	info.Hex_ = info.Hex
 	info.Length = int(r.Length)
+	info.Length_ = info.Length
 	info.Create = Iso8601Now()
 	info.Created = Iso8601Now()
 	info.Last = Iso8601Now()
@@ -53,6 +55,7 @@ func MergeMetainfo(r *crawl.MetadataResult) *crawl.Metainfo {
 			file.Path = strings.Join(f.Path, "/")
 		}
 		file.Length = int(f.Length)
+		file.Length_ = file.Length
 		info.Files = append(info.Files, file)
 	}
 	return info

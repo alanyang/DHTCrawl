@@ -24,9 +24,16 @@ const (
 					"type": "string",
 					"index": "no"
 				},
+				"_hex": {
+					"type": "string",
+					"index": "not_analyzed"
+				},
 				"length": {
 					"type": "long",
 					"index": "no"
+				},
+				"length": {
+					"type": "long"
 				},
 				"create": {
 					"type": "date",
@@ -58,7 +65,8 @@ const (
 					"include_in_parent": "true",
 					"properties": {
 						"path": {"type": "string", "boost": "1.5", "analyzer": "ik_max_word"},
-						"length": {"type": "long", "index": "no"}
+						"length": {"type": "long", "index": "no"},
+						"_length": {"type": "long"}
 					}
             	}
 			}
@@ -81,14 +89,17 @@ type (
 	}
 
 	MetaFile struct {
-		Path   string `json:"path,omitempty"`
-		Length int    `json:"length,omitempty"`
+		Path    string `json:"path,omitempty"`
+		Length  int    `json:"length,omitempty"`
+		Length_ int    `json:"_length,omitempty"`
 	}
 
 	Metainfo struct {
 		Name        string      `json:"name,omitempty"`
 		Hex         string      `json:"hex,omitempty"`
+		Hex_        string      `json:"_hex,omitempty"`
 		Length      int         `json:"length,omitempty"`
+		Length_     int         `json:"_length,omitempty"`
 		Create      string      `json:"create,omitempty"`
 		Created     string      `json:"_create,omitempty"`
 		Last        string      `json:"last,omitempty"` //last download
