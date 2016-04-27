@@ -88,12 +88,12 @@ func main() {
 			if id == string(crawl.DBValueUnIndexID) {
 				return true
 			}
-			err := ela.Update(
-				id,
-				"ctx._source._downloads += n;ctx._source._last = l;ctx._source.downloads += n;ctx._source.last = l;",
-				map[string]interface{}{"n": 1, "l": Iso8601Now()})
+			script := "ctx._source._downloads += n;ctx._source._last = l;ctx._source.downloads += n;ctx._source.last = l;"
+			params := map[string]interface{}{"n": 1, "l": Iso8601Now()}
+			err := ela.Update(id, script, params)
 			if err != nil {
 				log.Printf("Update download error %s\n", err.Error())
+				log.Println(id, script, params)
 			}
 			log.Println("Update success")
 		}
