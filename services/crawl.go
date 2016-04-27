@@ -95,8 +95,6 @@ func main() {
 			if err != nil {
 				log.Printf("Update download error %s\n", err.Error())
 				log.Println(id, script, params)
-			} else {
-				log.Printf("Update success %s \n", id)
 			}
 		}
 
@@ -106,10 +104,10 @@ func main() {
 	dht.HandleMetadata(func(info *crawl.MetadataResult) {
 		defer func() { num++ }()
 		log.Println(num)
-		println(info.String())
 		//put data to elasticsearch
 		id, err := ela.Index(MergeMetainfo(info))
 		log.Println(id)
+		println(info.String())
 		if err != nil {
 			log.Printf("index %s error: %s", info.Hash.Hex(), err.Error())
 			return
