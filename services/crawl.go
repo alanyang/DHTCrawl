@@ -24,14 +24,15 @@ func MergeMetainfo(r *crawl.MetadataResult) *crawl.Metainfo {
 	} else {
 		info.Name = r.Name
 	}
+	now := Iso8601Now()
 	info.Hex = r.Hash.Hex()
 	info.Hex_ = info.Hex
 	info.Length = int(r.Length)
 	info.Length_ = info.Length
-	info.Create = Iso8601Now()
-	info.Created = Iso8601Now()
-	info.Last = Iso8601Now()
-	info.Lasted = Iso8601Now()
+	info.Create = now
+	info.Created = now
+	info.Last = now
+	info.Lasted = now
 	info.Downloads = 1
 	info.Downloadeds = 1
 
@@ -88,14 +89,15 @@ func main() {
 			if id == string(crawl.DBValueUnIndexID) {
 				return true
 			}
-			script := "ctx._source._downloads += n;ctx._source._last = l;ctx._source.downloads += n;ctx._source.last = l;"
+			script := "ctx._source.downloads += n;ctx._source._downloads = ctx._source.downloads;ctx._source.last = l;ctx._source._last=l;"
 			params := map[string]interface{}{"n": 1, "l": Iso8601Now()}
 			err := ela.Update(id, script, params)
 			if err != nil {
 				log.Printf("Update download error %s\n", err.Error())
 				log.Println(id, script, params)
+			} else {
+				log.Printf("Update success %s \n", id)
 			}
-			log.Println("Update success")
 		}
 
 		return false
@@ -107,6 +109,7 @@ func main() {
 		println(info.String())
 		//put data to elasticsearch
 		id, err := ela.Index(MergeMetainfo(info))
+		log.Println(id)
 		if err != nil {
 			log.Printf("index %s error: %s", info.Hash.Hex(), err.Error())
 			return
