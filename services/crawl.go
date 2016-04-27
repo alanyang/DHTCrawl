@@ -73,8 +73,6 @@ func main() {
 	dht := crawl.NewDHT(nil)
 	num := 0
 	dht.HandleHash(func(hash crawl.Hash) bool {
-		// log.Println(hash.Hex())
-		// return false
 		key := []byte(hash)
 		d, err := db.Get(key, nil)
 		if err != nil {
