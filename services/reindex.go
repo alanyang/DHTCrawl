@@ -41,7 +41,7 @@ func main() {
 			}
 			numSuccess++
 			fmt.Printf("update document %s successful[%d]\n", id, numSuccess)
-			time.Sleep(time.Millisecond * 2)
+			time.Sleep(time.Millisecond * 1)
 		}
 	}
 	fmt.Printf("Updated document %d, failed %d\n", numSuccess, numFailed)
