@@ -95,6 +95,7 @@ func main() {
 			if err != nil {
 				log.Printf("Update download error %s\n", err.Error())
 			}
+			log.Println("Update success")
 		}
 
 		return false

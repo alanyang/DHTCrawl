@@ -191,7 +191,7 @@ func (e *Elastic) Index(meta *Metainfo) (string, error) {
 }
 
 func (e *Elastic) Update(id, script string, params map[string]interface{}) error {
-	s := elastic.NewScript(script).Params(params)
+	s := elastic.NewScriptInline(script).Params(params)
 	req := e.Conn.Update().Index(Index).Type(Type).Id(id).Script(s).ScriptedUpsert(false)
 	resp, err := req.Do()
 	if err != nil {
