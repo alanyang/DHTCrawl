@@ -52,12 +52,12 @@ func PacketFindNode(id, target NodeID) []byte {
 
 //response
 //id is self id
-func PacketGetPeers(hash Hash, id NodeID, nodes []byte, token, tid string) []byte {
+func PacketGetPeers(hash Hash, id NodeID, self NodeID, nodes []byte, token, tid string) []byte {
 	d := map[string]interface{}{
 		"t": tid,
 		"y": TYPE_RESPONSE,
 		"r": map[string]string{
-			"id":    NodeID(hash).Neighbor().String(),
+			"id":    id.Neighbor(self).String(),
 			"nodes": bytes.NewBuffer(nodes).String(),
 			"token": token,
 		},
@@ -66,21 +66,21 @@ func PacketGetPeers(hash Hash, id NodeID, nodes []byte, token, tid string) []byt
 	return b
 }
 
-func PacketAnnucePeer(hash Hash, id NodeID, tid string) []byte {
+func PacketAnnucePeer(hash Hash, id NodeID, self NodeID, tid string) []byte {
 	d := map[string]interface{}{
 		"t": tid,
 		"y": TYPE_RESPONSE,
-		"r": map[string]string{"id": NodeID(hash).Neighbor().String()},
+		"r": map[string]string{"id": NodeID(id).Neighbor(self).String()},
 	}
 	b, _ := bencode.EncodeBytes(d)
 	return b
 }
 
-func PacketPong(id NodeID, tid string) []byte {
+func PacketPong(id NodeID, self NodeID, tid string) []byte {
 	d := map[string]interface{}{
 		"t": tid,
 		"y": TYPE_RESPONSE,
-		"r": map[string]string{"id": id.Neighbor().String()},
+		"r": map[string]string{"id": id.Neighbor(self).String()},
 	}
 	b, _ := bencode.EncodeBytes(d)
 	return b
@@ -90,17 +90,23 @@ func NewRPC() *RPC {
 	return &RPC{}
 }
 
-func (r *RPC) HandleGetPeers(args map[string]interface{}) Hash {
-	if hash, ok := args["info_hash"].(string); ok {
-		return Hash(hash)
+func (r *RPC) HandleGetPeers(args map[string]interface{}) (hash Hash, id NodeID) {
+	if h, ok := args["info_hash"].(string); ok {
+		hash = Hash(h)
 	}
-	return ""
+	if i, ok := args["id"].(string); ok {
+		id = NodeID(i)
+	}
+	return
 }
 
 //info hash, tcp port, token
-func (r *RPC) HandleAnnoucePeer(args map[string]interface{}) (hash Hash, port int64, token string) {
+func (r *RPC) HandleAnnoucePeer(args map[string]interface{}) (hash Hash, id NodeID, port int64, token string) {
 	if h, ok := args["info_hash"].(string); ok {
 		hash = Hash(h)
+	}
+	if i, ok := args["id"].(string); ok {
+		id = NodeID(i)
 	}
 	port, _ = args["port"].(int64)
 	token, _ = args["token"].(string)
@@ -160,12 +166,12 @@ func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 		}
 		switch q {
 		case OP_GET_PEERS:
-			hash := r.HandleGetPeers(a)
+			hash, id := r.HandleGetPeers(a)
 			if string(hash) != "" {
-				return &Result{Cmd: OP_GET_PEERS, UDPAddr: addr, Hash: hash, Tid: t}, nil
+				return &Result{Cmd: OP_GET_PEERS, UDPAddr: addr, Hash: hash, ID: id, Tid: t}, nil
 			}
 		case OP_ANNOUNCE_PEER:
-			hash, port, token := r.HandleAnnoucePeer(a)
+			hash, id, port, token := r.HandleAnnoucePeer(a)
 			if port == int64(-1) {
 				port = int64(addr.Port)
 			}
@@ -175,6 +181,7 @@ func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 					Cmd:     OP_ANNOUNCE_PEER,
 					UDPAddr: addr,
 					Hash:    hash,
+					ID:      id,
 					TCPAddr: tcpAddr,
 					Token:   token,
 					Tid:     t,

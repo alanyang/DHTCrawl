@@ -35,6 +35,9 @@ const (
 				"length": {
 					"type": "long"
 				},
+				"type": {
+					"type": "long"
+				},
 				"create": {
 					"type": "date",
 					"index": "no"

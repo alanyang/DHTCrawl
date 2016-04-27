@@ -64,8 +64,8 @@ func (n NodeID) Hex() string {
 	return fmt.Sprintf("%X", n)
 }
 
-func (n NodeID) Neighbor() NodeID {
-	return append(n[:10], NewNodeID()[10:]...)
+func (n NodeID) Neighbor(target NodeID) NodeID {
+	return append(n[:6], target[6:]...)
 }
 
 func (h Hash) Hex() string {

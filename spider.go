@@ -88,19 +88,21 @@ func (d *DHT) Run() {
 		switch r.Cmd {
 		case OP_FIND_NODE:
 			for _, node := range r.Nodes {
-				d.Table.Add(node)
+				if node.ID.Hex() != d.Table.Self.Hex() {
+					d.Table.Add(node)
+				}
 			}
 
 		case OP_PING:
-			d.Session.SendTo(PacketPong(r.ID, r.Tid), r.UDPAddr)
+			d.Session.SendTo(PacketPong(r.ID, d.Table.Self, r.Tid), r.UDPAddr)
 
 		case OP_GET_PEERS:
 			ns := ConvertByteStream(d.Table.Last)
-			d.Session.SendTo(PacketGetPeers(r.Hash, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
+			d.Session.SendTo(PacketGetPeers(r.Hash, r.ID, d.Table.Self, ns, d.Token.Value, r.Tid), r.UDPAddr)
 
 		case OP_ANNOUNCE_PEER:
 			if d.Token.IsValid(r.Token) {
-				d.Session.SendTo(PacketAnnucePeer(r.Hash, d.Table.Self, r.Tid), r.UDPAddr)
+				d.Session.SendTo(PacketAnnucePeer(r.Hash, r.ID, d.Table.Self, r.Tid), r.UDPAddr)
 				if d.HashHandler != nil {
 					need := d.HashHandler(r.Hash)
 					if need {
@@ -130,7 +132,7 @@ func (d *DHT) Walk() {
 			time.Sleep(time.Millisecond * 800)
 		} else {
 			d.Table.Each(func(node *Node, _ int) {
-				d.Session.SendTo(PacketFindNode(node.ID.Neighbor(), NewNodeID()), node.Addr)
+				d.Session.SendTo(PacketFindNode(node.ID.Neighbor(d.Table.Self), NewNodeID()), node.Addr)
 				time.Sleep(time.Millisecond * 2)
 			})
 			d.Table.Flush()
