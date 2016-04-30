@@ -167,7 +167,7 @@ func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 		switch q {
 		case OP_GET_PEERS:
 			hash, id := r.HandleGetPeers(a)
-			if string(hash) != "" {
+			if string(hash) != "" && string(id) != "" {
 				return &Result{Cmd: OP_GET_PEERS, UDPAddr: addr, Hash: hash, ID: id, Tid: t}, nil
 			}
 		case OP_ANNOUNCE_PEER:
@@ -175,7 +175,7 @@ func (r *RPC) parse(data []byte, addr *net.UDPAddr) (*Result, error) {
 			if port == int64(-1) {
 				port = int64(addr.Port)
 			}
-			if string(hash) != "" && IsValidPort(int(port)) {
+			if string(hash) != "" && IsValidPort(int(port)) && string(id) != "" {
 				tcpAddr := &net.TCPAddr{IP: addr.IP, Port: int(port)}
 				return &Result{
 					Cmd:     OP_ANNOUNCE_PEER,
