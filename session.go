@@ -7,9 +7,10 @@ import (
 )
 
 type Session struct {
-	Conn   *net.UDPConn
-	result chan *Result
-	rpc    *RPC
+	Conn       *net.UDPConn
+	result     chan *Result
+	rpc        *RPC
+	ExternalIP string
 }
 
 func NewSession(port int) (*Session, error) {
@@ -33,9 +34,47 @@ func NewSession(port int) (*Session, error) {
 	}
 
 	session := &Session{Conn: conn, result: make(chan *Result), rpc: NewRPC()}
+	session.ExternalIP, _ = session.GetExternalIP()
 	log.Printf("Start Crawl on %s", conn.LocalAddr().String())
 	go session.serve()
 	return session, nil
+}
+
+func (s *Session) GetExternalIP() (string, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "", err
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue // interface down
+		}
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue // loopback interface
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return "", err
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil {
+				continue // not an ipv4 address
+			}
+			return ip.String(), nil
+		}
+	}
+	return "", errors.New("are you connected to the network?")
 }
 
 func (s *Session) serve() {

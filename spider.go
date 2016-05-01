@@ -88,7 +88,7 @@ func (d *DHT) Run() {
 		switch r.Cmd {
 		case OP_FIND_NODE:
 			for _, node := range r.Nodes {
-				if node.ID.Hex() != d.Table.Self.Hex() {
+				if node.ID.Hex() != d.Table.Self.Hex() && d.Session.ExternalIP != node.Addr.IP.String() {
 					d.Table.Add(node)
 				}
 			}
