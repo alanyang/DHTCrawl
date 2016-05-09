@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/zeebo/bencode"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -259,10 +260,22 @@ func (w *Wire) fromPeer(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
 	w.Processor.Conn = conn
 	w.Processor.Start(hash)
 	go func(conn net.Conn) {
+		var (
+			n   int
+			err error
+		)
+		defer func() {
+			if r := recover(); r != nil {
+				log.Fatal(fmt.Printf("Has panic %s, received n=%d", r, n))
+			}
+		}()
 		for {
 			buf := make([]byte, 1024)
-			n, err := conn.Read(buf)
+			n, err = conn.Read(buf)
 			if err != nil {
+				return
+			}
+			if n < 0 || n > 1024 {
 				return
 			}
 			w.Processor.Write(buf[:n])
