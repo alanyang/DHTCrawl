@@ -47,10 +47,10 @@ func (s *Session) GetExternalIP() (string, error) {
 	}
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 {
-			continue // interface down
+			continue
 		}
 		if iface.Flags&net.FlagLoopback != 0 {
-			continue // loopback interface
+			continue
 		}
 		addrs, err := iface.Addrs()
 		if err != nil {
@@ -69,7 +69,7 @@ func (s *Session) GetExternalIP() (string, error) {
 			}
 			ip = ip.To4()
 			if ip == nil {
-				continue // not an ipv4 address
+				continue
 			}
 			return ip.String(), nil
 		}

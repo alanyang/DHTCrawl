@@ -275,7 +275,7 @@ func (w *Wire) fromPeer(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
 			if err != nil {
 				return
 			}
-			if n < 0 || n > 1024 {
+			if n < 0 || n > len(buf) {
 				return
 			}
 			w.Processor.Write(buf[:n])

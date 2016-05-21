@@ -2,7 +2,6 @@ package main
 
 import (
 	crawl "DHTCrawl"
-	"github.com/syndtr/goleveldb/leveldb"
 	"log"
 	"sort"
 	"strings"
@@ -26,15 +25,10 @@ func MergeMetainfo(r *crawl.MetadataResult) *crawl.Metainfo {
 	}
 	now := Iso8601Now()
 	info.Hex = r.Hash.Hex()
-	info.Hex_ = info.Hex
 	info.Length = int(r.Length)
-	info.Length_ = info.Length
 	info.Create = now
-	info.Created = now
 	info.Last = now
-	info.Lasted = now
 	info.Downloads = 1
-	info.Downloadeds = 1
 
 	var ext string
 	if len(r.Files) != 0 {
@@ -56,48 +50,33 @@ func MergeMetainfo(r *crawl.MetadataResult) *crawl.Metainfo {
 			file.Path = strings.Join(f.Path, "/")
 		}
 		file.Length = int(f.Length)
-		file.Length_ = file.Length
 		info.Files = append(info.Files, file)
 	}
 	return info
 }
 
 func main() {
-	db, err := leveldb.OpenFile(crawl.DBPath(), nil)
-	if err != nil {
-		log.Fatal(err)
-	}
 	ela, err := crawl.NewElastic(crawl.ElasticUrl())
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	dht := crawl.NewDHT(nil)
 	num := 0
 	dht.HandleHash(func(hash crawl.Hash) bool {
-		key := []byte(hash)
-		d, err := db.Get(key, nil)
+		_, id, err := ela.GetDocByHex(hash.Hex())
 		if err != nil {
-			err = db.Put(key, crawl.DBValueUnIndexID, nil)
-			if err != nil {
-				log.Fatal(err)
-				return false
-			}
+			//no has
 			return true
-		} else {
-			id := string(d)
-			//undownload
-			if id == string(crawl.DBValueUnIndexID) {
-				return true
-			}
-			script := "ctx._source.downloads += n;ctx._source._downloads = ctx._source.downloads;ctx._source.last = l;ctx._source._last=l;"
-			params := map[string]interface{}{"n": 1, "l": Iso8601Now()}
-			err := ela.Update(id, script, params)
-			if err != nil {
-				log.Printf("Update download error %s\n", err.Error())
-				log.Println(id, script, params)
-			}
 		}
-
+		script := "ctx._source.downloads += n;ctx._source.last = l;"
+		params := map[string]interface{}{"n": 1, "l": Iso8601Now()}
+		err = ela.Update(id, script, params)
+		if err != nil {
+			log.Printf("Update download error %s\n", err.Error())
+			log.Println(id, script, params)
+		}
+		log.Printf("Updated %s done", id)
 		return false
 	})
 
@@ -111,12 +90,6 @@ func main() {
 		if err != nil {
 			log.Printf("index %s error: %s", info.Hash.Hex(), err.Error())
 			return
-		}
-		//put elasticsearch document id to leveldb
-		key := []byte(info.Hash)
-		err = db.Put(key, []byte(id), nil)
-		if err != nil {
-			log.Fatal(err)
 		}
 	})
 	dht.Run()

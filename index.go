@@ -1,12 +1,14 @@
 package DHTCrawl
 
 import (
+	"encoding/json"
 	"errors"
 	"gopkg.in/olivere/elastic.v3"
+	// "log"
 )
 
 const (
-	Index   = "bittorrent"
+	Index   = "bittorrent2"
 	Type    = "metainfo"
 	Mapping = `
 	{
@@ -15,22 +17,13 @@ const (
             	"store": "true"
 			},
 			"properties":{
-				"name":{
+				"name": {
 					"type":"string",
 					"boost": "2.0",
 					"analyzer": "ik_max_word"
 				},
 				"hex": {
-					"type": "string",
-					"index": "no"
-				},
-				"_hex": {
-					"type": "string",
-					"index": "not_analyzed"
-				},
-				"length": {
-					"type": "long",
-					"index": "no"
+					"type": "string"
 				},
 				"length": {
 					"type": "long"
@@ -39,37 +32,20 @@ const (
 					"type": "long"
 				},
 				"create": {
-					"type": "date",
-					"index": "no"
-				},
-				"_create": {
 					"type": "date"
 				},
 				"downloads": {
-					"type": "long",
-					"index": "no"
-				},
-				"_downloads": {
 					"type": "long"
 				},
 				"last": {
-					"type": "date",
-					"index": "no"
-				},
-				"_last": {
 					"type": "date"
-				},
-				"datatype": {
-					"type": "integer",
-					"index": "no"
 				},
 				"files":{
 					"type" : "nested",
 					"include_in_parent": "true",
 					"properties": {
 						"path": {"type": "string", "boost": "1.5", "analyzer": "ik_max_word"},
-						"length": {"type": "long", "index": "no"},
-						"_length": {"type": "long"}
+						"length": {"type": "long"}
 					}
             	}
 			}
@@ -92,25 +68,19 @@ type (
 	}
 
 	MetaFile struct {
-		Path    string `json:"path,omitempty"`
-		Length  int    `json:"length,omitempty"`
-		Length_ int    `json:"_length,omitempty"`
+		Path   string `json:"path,omitempty"`
+		Length int    `json:"length,omitempty"`
 	}
 
 	Metainfo struct {
-		Name        string      `json:"name,omitempty"`
-		Hex         string      `json:"hex,omitempty"`
-		Hex_        string      `json:"_hex,omitempty"`
-		Length      int         `json:"length,omitempty"`
-		Length_     int         `json:"_length,omitempty"`
-		Create      string      `json:"create,omitempty"`
-		Created     string      `json:"_create,omitempty"`
-		Last        string      `json:"last,omitempty"` //last download
-		Lasted      string      `json:"_last,omitempty"`
-		Downloads   int         `json:"downloads,omitempty"` //downloads count
-		Downloadeds int         `json:"_downloads,omitempty"`
-		Type        int         `json:"type,omitempty"`
-		Files       []*MetaFile `json:"files,omitempty"`
+		Name      string      `json:"name,omitempty"`
+		Hex       string      `json:"hex,omitempty"`
+		Length    int         `json:"length,omitempty"`
+		Create    string      `json:"create,omitempty"`
+		Last      string      `json:"last,omitempty"`      //last download
+		Downloads int         `json:"downloads,omitempty"` //downloads count
+		Type      int         `json:"type,omitempty"`
+		Files     []*MetaFile `json:"files,omitempty"`
 	}
 )
 
@@ -201,4 +171,22 @@ func (e *Elastic) Update(id, script string, params map[string]interface{}) error
 		return errors.New("Update fail")
 	}
 	return nil
+}
+
+func (e *Elastic) GetDocByHex(hex string) (*Metainfo, string, error) {
+	query := elastic.NewTermQuery("hex", hex)
+	resp, err := e.Conn.Search().Index(Index).Type(Type).Query(query).Do()
+	if err != nil {
+		return nil, "", err
+	}
+	for _, hit := range resp.Hits.Hits {
+		item := new(Metainfo)
+		err := json.Unmarshal(*hit.Source, item)
+		if err != nil {
+			return nil, "", err
+		}
+		return item, hit.Id, nil
+	}
+
+	return nil, "", errors.New("Not has the document")
 }

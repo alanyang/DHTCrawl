@@ -84,7 +84,7 @@ func DBPath() (p string) {
 
 func ElasticUrl() (u string) {
 	if runtime.GOOS == "linux" {
-		u = "http://104.156.238.194:9200"
+		u = "http://45.32.34.243:9200"
 	} else if runtime.GOOS == "darwin" {
 		u = "http://127.0.0.1:9200"
 	}
