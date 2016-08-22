@@ -2,6 +2,7 @@ package main
 
 import (
 	crawl "DHTCrawl"
+	"flag"
 	"log"
 	"sort"
 	"strings"
@@ -56,7 +57,10 @@ func MergeMetainfo(r *crawl.MetadataResult) *crawl.Metainfo {
 }
 
 func main() {
-	ela, err := crawl.NewElastic(crawl.ElasticUrl())
+	elasticUrl := ""
+	flag.StringVar(&elasticUrl, "elastic", crawl.ElasticUrl(), "elasticsearch host")
+	log.Println(elasticUrl)
+	ela, err := crawl.NewElastic(elasticUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -64,6 +68,7 @@ func main() {
 	dht := crawl.NewDHT(nil)
 	num := 0
 	dht.HandleHash(func(hash crawl.Hash) bool {
+		log.Println(hash.Hex())
 		_, id, err := ela.GetDocByHex(hash.Hex())
 		if err != nil {
 			//no has
