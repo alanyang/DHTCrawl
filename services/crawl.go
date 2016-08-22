@@ -59,6 +59,7 @@ func MergeMetainfo(r *crawl.MetadataResult) *crawl.Metainfo {
 func main() {
 	elasticUrl := ""
 	flag.StringVar(&elasticUrl, "elastic", crawl.ElasticUrl(), "elasticsearch host")
+	flag.Parse()
 	log.Println(elasticUrl)
 	ela, err := crawl.NewElastic(elasticUrl)
 	if err != nil {
