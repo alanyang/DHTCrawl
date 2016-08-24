@@ -69,7 +69,6 @@ func main() {
 	dht := crawl.NewDHT(nil)
 	num := 0
 	dht.HandleHash(func(hash crawl.Hash) bool {
-		log.Println(hash.Hex())
 		_, id, err := ela.GetDocByHex(hash.Hex())
 		if err != nil {
 			//no has
