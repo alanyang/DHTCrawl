@@ -65,7 +65,7 @@ func (n NodeID) Hex() string {
 }
 
 func (n NodeID) Neighbor(target NodeID) NodeID {
-	return append(n[:6], target[6:]...)
+	return append(n[:8], target[8:]...)
 }
 
 func (h Hash) Hex() string {
