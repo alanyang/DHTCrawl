@@ -23,20 +23,20 @@ type (
 	}
 
 	Set struct {
-		data map[interface{}]int
+		data map[interface{}]struct{}
 		mu   *sync.RWMutex
 	}
 )
 
 func NewSet() *Set {
-	return &Set{data: make(map[interface{}]int), mu: new(sync.RWMutex)}
+	return &Set{data: make(map[interface{}]struct{}), mu: new(sync.RWMutex)}
 }
 
 func (s *Set) String() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	keys := []interface{}{}
-	for key, _ := range s.data {
+	for key := range s.data {
 		keys = append(keys, key)
 	}
 	return fmt.Sprintf("Set(%v)", keys)
@@ -45,7 +45,7 @@ func (s *Set) String() string {
 func (s *Set) Set(v interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.data[v] = 0
+	s.data[v] = struct{}{}
 }
 
 func (s *Set) Has(v interface{}) (ok bool) {

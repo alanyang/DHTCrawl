@@ -2,11 +2,11 @@ package DHTCrawl
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/zeebo/bencode"
 	"log"
 	"math"
 	"net"
@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zeebo/bencode"
 )
 
 const (
@@ -78,7 +80,7 @@ type (
 		Publisher     string      `bencode:"publisher" json:"publisher,omitempty"`
 		UPublisher    string      `bencode:"publisher.utf-8" json:"uublisher,omitempty"`
 		PublisherUrl  string      `bencode:"publisher-url" json:"publisherUrl,omitempty"`
-		UPublisherUrl string      `bencode:"publisher-url.utf-8" json:"publisherUrl,omitempty"`
+		UPublisherUrl string      `bencode:"publisher-url.utf-8" json:"upublisherUrl,omitempty"`
 		Files         []*File     `bencode:"files" json:"files,omitempty"`
 
 		Type     int      `json:"datatype,omitempty"`
@@ -236,7 +238,9 @@ func (w *Wire) wait() {
 
 func (w *Wire) Download(hash Hash, addr *net.TCPAddr) (result *MetadataResult, err error) {
 	defer w.Release()
-	result, err = w.fromPeer(hash, addr)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Second*(WireTimeout+1)))
+	defer cancel()
+	result, err = w.fromPeer(ctx, hash, addr)
 	if err == nil {
 		w.Result <- result
 		return
@@ -250,7 +254,7 @@ func (w *Wire) Download(hash Hash, addr *net.TCPAddr) (result *MetadataResult, e
 	return
 }
 
-func (w *Wire) fromPeer(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
+func (w *Wire) fromPeer(ctx context.Context, hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
 	conn, err := net.DialTimeout("tcp", addr.String(), time.Second*WireConnectTimeout)
 	if err != nil {
 		return nil, err
@@ -281,7 +285,6 @@ func (w *Wire) fromPeer(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
 			w.Processor.Write(buf[:n])
 		}
 	}(conn)
-	timeout := time.After(time.Second * (WireTimeout + 1))
 	for {
 		select {
 		case event := <-w.Processor.event:
@@ -294,11 +297,10 @@ func (w *Wire) fromPeer(hash Hash, addr *net.TCPAddr) (*MetadataResult, error) {
 			case EventExtended:
 			case EventPiece:
 			}
-		case <-timeout:
+		case <-ctx.Done():
 			return nil, errors.New("TCP timeout")
 		}
 	}
-	return nil, errors.New("Socket timeout")
 }
 
 func (w *Wire) fromHTTP(hash Hash) (*MetadataResult, error) {

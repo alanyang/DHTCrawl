@@ -1,12 +1,13 @@
 package main
 
 import (
-	crawl "DHTCrawl"
 	"fmt"
-	"github.com/syndtr/goleveldb/leveldb"
-	"gopkg.in/olivere/elastic.v3"
 	"log"
 	"time"
+
+	crawl "bitbucket.org/AlanYang/DHTCrawl"
+	"github.com/syndtr/goleveldb/leveldb"
+	"gopkg.in/olivere/elastic.v3"
 )
 
 func main() {

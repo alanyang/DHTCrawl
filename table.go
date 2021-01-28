@@ -36,7 +36,7 @@ func NewNodeID() NodeID {
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
 	hash := sha1.New()
 	io.WriteString(hash, time.Now().String())
-	io.WriteString(hash, string(random.Int()))
+	io.WriteString(hash, fmt.Sprintf("%d", random.Int()))
 	io.WriteString(hash, "AmyLee+AlanYang!")
 	return hash.Sum(nil)
 }
