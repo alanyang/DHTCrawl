@@ -15,17 +15,16 @@ type Token struct {
 func NewToken(duration int) *Token {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	t := Token{fmt.Sprintf("%x", r.Int()), "", time.Duration(duration)}
-	go t.refresh()
+	// go t.refresh()
+	time.AfterFunc(time.Minute*t.Duration, t.refresh)
 	return &t
 }
 
 func (t *Token) refresh() {
-	for {
-		time.Sleep(time.Minute * t.Duration)
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		t.prev = t.Value
-		t.Value = fmt.Sprintf("%x", r.Int())
-	}
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	t.prev = t.Value
+	t.Value = fmt.Sprintf("%x", r.Int())
+	time.AfterFunc(time.Minute*t.Duration, t.refresh)
 }
 
 func (t *Token) IsValid(v string) (b bool) {

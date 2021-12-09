@@ -19,8 +19,8 @@ type (
 		Token           *Token
 		HashHandler     HashHandler
 		MetadataHandler ResultHandler
-		Pipeline        Pipeline
 		JobPool         *WireJob
+		Handler         Collector
 	}
 
 	DHTConfig struct {
@@ -31,8 +31,9 @@ type (
 		DBPath        string
 	}
 
-	Pipeline interface {
-		MetaInfo(*MetadataResult)
+	Collector interface {
+		MetaInfoHandler(*MetadataResult)
+		HashHandler(Hash)
 	}
 )
 
@@ -130,11 +131,10 @@ func (d *DHT) Walk() {
 	for {
 		if len(d.Table.Nodes) == 0 || d.Table.Nodes == nil {
 			d.Join()
-			time.Sleep(time.Millisecond * 800)
+			time.AfterFunc(time.Millisecond*800, d.Walk)
 		} else {
 			d.Table.Each(func(node *Node, _ int) {
 				d.Session.SendTo(PacketFindNode(node.ID.Neighbor(d.Table.Self), NewNodeID()), node.Addr)
-				time.Sleep(time.Millisecond * 2)
 			})
 			d.Table.Flush()
 		}
