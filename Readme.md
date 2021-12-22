@@ -1,7 +1,8 @@
 # DHT Resource crawl
 
 develop for [engiy.com](http://engiy.com)(A bittorrent resource search engine) [shutdown]
-Implements [DHT protocol](http://www.bittorrent.org/beps/bep_0005.html)(http://www.bittorrent.org/beps/bep_0006.html)
+Implements [DHT protocol](http://www.bittorrent.org/beps/bep_0005.html)
+[DHT Fast Extension](http://www.bittorrent.org/beps/bep_0006.html)
 
 ## requirement
 go 1.10+
@@ -9,7 +10,7 @@ go 1.10+
 
 ## install
 ```
-go get https://github.com/alanyang/dhtspider
+go get -u -v https://github.com/alanyang/DHTCrawl
 ```
 
 
@@ -20,7 +21,7 @@ package main
 import (
 	"log"
 
-	dhtcrawl "bitbucket.org/AlanYang/DHTCrawl"
+	dhtcrawl "github.com/alanyang/DHTCrawl"
 )
 
 func main() {
