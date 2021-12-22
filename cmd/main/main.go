@@ -16,7 +16,7 @@ func main() {
 	})
 
 	dht.HandleMetadata(func(info *dhtcrawl.MetadataResult) {
-		println(info.String())
+		log.Println(info.String())
 	})
 	dht.Run()
 }
