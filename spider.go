@@ -28,12 +28,18 @@ type (
 		Port          int    //DHT UDP listen port
 		TokenValidity int    //token validity (minute)
 		JobSize       int
-		DBPath        string
+		Entries       []string
 	}
 
 	Collector interface {
 		MetaInfoHandler(*MetadataResult)
 		HashHandler(Hash)
+	}
+
+	Remote string
+
+	RemoteServer interface {
+		Format(...string) string
 	}
 )
 
@@ -48,6 +54,11 @@ func NewDefaultConfig() *DHTConfig {
 		TokenValidity: 5,
 		Port:          2412,
 		JobSize:       500,
+		Entries: []string{
+			"67.215.246.10:6881",
+			"212.129.33.50:6881",
+			"82.221.103.244:6881",
+		},
 	}
 }
 
@@ -60,15 +71,11 @@ func NewDHT(cfg *DHTConfig) *DHT {
 		log.Fatal(err)
 	}
 	return &DHT{
-		Session: session,
-		Table:   NewTable(),
-		Token:   NewToken(cfg.TokenValidity),
-		JobPool: NewWireJob(cfg.JobSize),
-		Bootstraps: []string{
-			"67.215.246.10:6881",
-			"212.129.33.50:6881",
-			"82.221.103.244:6881",
-		},
+		Session:    session,
+		Table:      NewTable(),
+		Token:      NewToken(cfg.TokenValidity),
+		JobPool:    NewWireJob(cfg.JobSize),
+		Bootstraps: cfg.Entries,
 	}
 }
 
